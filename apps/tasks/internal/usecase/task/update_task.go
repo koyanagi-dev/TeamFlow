@@ -1,0 +1,62 @@
+package task
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	domain "teamflow-tasks/internal/domain/task"
+)
+
+// UpdateTaskInput はタスク更新ユースケースの入力。
+// フィールドは PATCH を想定し、nil の場合は更新しない。
+type UpdateTaskInput struct {
+	ID          string
+	Title       *string
+	Description *string
+	Status      *string
+	DueDate     *string
+	Now         time.Time
+}
+
+// UpdateTaskUsecase はタスク更新ユースケースを表す。
+type UpdateTaskUsecase struct {
+	Repo TaskRepository
+}
+
+// Execute は既存タスクを取得し、指定されたフィールドを更新する。
+func (uc *UpdateTaskUsecase) Execute(ctx context.Context, in UpdateTaskInput) (*domain.Task, error) {
+	existing, err := uc.Repo.FindByID(ctx, in.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	var status *domain.TaskStatus
+	if in.Status != nil {
+		s := domain.TaskStatus(*in.Status)
+		status = &s
+	}
+
+	var dueDate *time.Time
+	if in.DueDate != nil {
+		if *in.DueDate == "" {
+			return nil, errors.New("dueDate must be RFC3339 when provided")
+		}
+		parsed, err := time.Parse(time.RFC3339, *in.DueDate)
+		if err != nil {
+			return nil, fmt.Errorf("dueDate must be RFC3339: %w", err)
+		}
+		dueDate = &parsed
+	}
+
+	if err := existing.Update(in.Title, in.Description, status, dueDate, in.Now); err != nil {
+		return nil, err
+	}
+
+	if err := uc.Repo.Update(ctx, existing); err != nil {
+		return existing, err
+	}
+
+	return existing, nil
+}
