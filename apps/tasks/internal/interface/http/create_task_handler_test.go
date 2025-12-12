@@ -246,9 +246,11 @@ func TestUpdateTaskHandler_Success(t *testing.T) {
 	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
 
 	body := map[string]string{
-		"title":   "updated title",
-		"status":  string(domain.StatusInProgress),
-		"dueDate": "2025-02-01T12:00:00Z",
+		"title":      "updated title",
+		"status":     string(domain.StatusInProgress),
+		"dueDate":    "2025-02-01T12:00:00Z",
+		"assigneeId": "user-1",
+		"priority":   string(domain.PriorityHigh),
 	}
 	b, _ := json.Marshal(body)
 

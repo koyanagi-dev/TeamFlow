@@ -16,6 +16,8 @@ type UpdateTaskInput struct {
 	Title       *string
 	Description *string
 	Status      *string
+	AssigneeID  *string
+	Priority    *string
 	DueDate     *string
 	Now         time.Time
 }
@@ -29,6 +31,9 @@ type UpdateTaskUsecase struct {
 func (uc *UpdateTaskUsecase) Execute(ctx context.Context, in UpdateTaskInput) (*domain.Task, error) {
 	existing, err := uc.Repo.FindByID(ctx, in.ID)
 	if err != nil {
+		if errors.Is(err, ErrTaskNotFound) {
+			return nil, fmt.Errorf("%w: %v", ErrTaskNotFound, err)
+		}
 		return nil, err
 	}
 
@@ -41,20 +46,23 @@ func (uc *UpdateTaskUsecase) Execute(ctx context.Context, in UpdateTaskInput) (*
 	var dueDate *time.Time
 	if in.DueDate != nil {
 		if *in.DueDate == "" {
-			return nil, errors.New("dueDate must be RFC3339 when provided")
+			return nil, fmt.Errorf("%w: dueDate must be RFC3339 when provided", ErrInvalidInput)
 		}
 		parsed, err := time.Parse(time.RFC3339, *in.DueDate)
 		if err != nil {
-			return nil, fmt.Errorf("dueDate must be RFC3339: %w", err)
+			return nil, fmt.Errorf("%w: dueDate must be RFC3339: %v", ErrInvalidInput, err)
 		}
 		dueDate = &parsed
 	}
 
 	if err := existing.Update(in.Title, in.Description, status, dueDate, in.Now); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 
 	if err := uc.Repo.Update(ctx, existing); err != nil {
+		if errors.Is(err, ErrTaskNotFound) {
+			return existing, fmt.Errorf("%w: %v", ErrTaskNotFound, err)
+		}
 		return existing, err
 	}
 

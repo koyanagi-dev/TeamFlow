@@ -2,7 +2,6 @@ package taskinfra
 
 import (
 	"context"
-	"errors"
 
 	domain "teamflow-tasks/internal/domain/task"
 	usecase "teamflow-tasks/internal/usecase/task"
@@ -17,7 +16,7 @@ type MemoryTaskRepository struct {
 var _ usecase.TaskRepository = (*MemoryTaskRepository)(nil)
 
 // ErrTaskNotFound は指定 ID のタスクが存在しない場合に返す。
-var ErrTaskNotFound = errors.New("task not found")
+var ErrTaskNotFound = usecase.ErrTaskNotFound
 
 // NewMemoryTaskRepository は空のインメモリリポジトリを生成する。
 func NewMemoryTaskRepository() *MemoryTaskRepository {

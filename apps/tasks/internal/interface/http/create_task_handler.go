@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	infra "teamflow-tasks/internal/infrastructure/task"
 	usecase "teamflow-tasks/internal/usecase/task"
 )
 
@@ -133,13 +132,19 @@ func (h *TaskHandler) handleListByProject(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	status := r.URL.Query().Get("status")
+	assigneeId := r.URL.Query().Get("assigneeId")
 	projectID := r.URL.Query().Get("projectId")
 	if projectID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	tasks, err := h.listUC.Execute(r.Context(), projectID)
+	tasks, err := h.listUC.Execute(r.Context(), usecase.ListTasksByProjectInput{
+		ProjectID:  projectID,
+		Status:     status,
+		AssigneeID: assigneeId,
+	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -169,6 +174,8 @@ type updateTaskRequest struct {
 	Title       *string `json:"title"`
 	Description *string `json:"description"`
 	Status      *string `json:"status"`
+	AssigneeID  *string `json:"assigneeId"`
+	Priority    *string `json:"priority"`
 	DueDate     *string `json:"dueDate"`
 }
 
@@ -189,20 +196,19 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 		Title:       req.Title,
 		Description: req.Description,
 		Status:      req.Status,
+		AssigneeID:  req.AssigneeID,
+		Priority:    req.Priority,
 		DueDate:     req.DueDate,
 		Now:         h.nowFunc(),
 	}
 
 	t, err := h.updateUC.Execute(r.Context(), in)
 	if err != nil {
-		if errors.Is(err, infra.ErrTaskNotFound) {
+		if errors.Is(err, usecase.ErrTaskNotFound) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		// ドメインバリデーションや入力エラーは 400
-		if strings.Contains(err.Error(), "must not be empty") ||
-			strings.Contains(err.Error(), "invalid task status") ||
-			strings.Contains(err.Error(), "dueDate") {
+		if errors.Is(err, usecase.ErrInvalidInput) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}

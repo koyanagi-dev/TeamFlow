@@ -14,7 +14,7 @@ type listRepo struct {
 	out []*domain.Task
 }
 
-func (r *listRepo) Save(context.Context, *domain.Task) error { return nil }
+func (r *listRepo) Save(context.Context, *domain.Task) error   { return nil }
 func (r *listRepo) Update(context.Context, *domain.Task) error { return nil }
 func (r *listRepo) FindByID(_ context.Context, id string) (*domain.Task, error) {
 	for _, t := range r.out {
@@ -60,7 +60,9 @@ func TestListTasksByProject_Success(t *testing.T) {
 		Repo: repo,
 	}
 
-	got, err := uc.Execute(context.Background(), "proj-1")
+	got, err := uc.Execute(context.Background(), usecase.ListTasksByProjectInput{
+		ProjectID: "proj-1",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

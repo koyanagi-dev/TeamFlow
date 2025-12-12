@@ -29,7 +29,9 @@ func main() {
 	taskHandler := httphandler.NewTaskHandler(createUC, listUC, updateUC, time.Now)
 
 	mux := http.NewServeMux()
-	mux.Handle("/tasks", taskHandler)
+	
+	// API はすべて /api 配下
+	mux.Handle("/api/", http.StripPrefix("/api", taskHandler))
 
 	// ヘルスチェック
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {

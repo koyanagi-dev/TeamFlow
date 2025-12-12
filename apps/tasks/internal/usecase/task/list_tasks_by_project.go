@@ -11,6 +11,12 @@ type ListTasksByProjectUsecase struct {
 	Repo TaskRepository
 }
 
-func (uc *ListTasksByProjectUsecase) Execute(ctx context.Context, projectID string) ([]*domain.Task, error) {
-	return uc.Repo.ListByProject(ctx, projectID)
+type ListTasksByProjectInput struct {
+	ProjectID  string
+	Status     string
+	AssigneeID string
+}
+
+func (uc *ListTasksByProjectUsecase) Execute(ctx context.Context, in ListTasksByProjectInput) ([]*domain.Task, error) {
+	return uc.Repo.ListByProject(ctx, in.ProjectID)
 }
