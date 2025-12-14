@@ -179,27 +179,76 @@ type updateTaskRequest struct {
 	DueDate     *string `json:"dueDate"`
 }
 
+// PatchTaskRequest は PATCH /api/tasks/{id} のリクエストボディ。
+type PatchTaskRequest struct {
+	Title    *string `json:"title"`
+	Status   *string `json:"status"`
+	Priority *string `json:"priority"`
+}
+
 func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id string) {
 	if h.updateUC == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	var req updateTaskRequest
+	var req PatchTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
+	// 全部 nil チェック
+	if req.Title == nil && req.Status == nil && req.Priority == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var trimmedTitle *string
+	if req.Title != nil {
+		// title が空文字または空白のみの場合は 400
+		trimmed := strings.TrimSpace(*req.Title)
+		if trimmed == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		trimmedTitle = &trimmed
+	}
+
+	var status *string
+	if req.Status != nil {
+		// status バリデーション: todo/doing/done/in_progress 以外は 400
+		s := *req.Status
+		if s != "todo" && s != "doing" && s != "done" && s != "in_progress" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		// "doing" を "in_progress" にマッピング
+		if s == "doing" {
+			mapped := "in_progress"
+			status = &mapped
+		} else {
+			status = &s
+		}
+	}
+
+	var priority *string
+	if req.Priority != nil {
+		// priority バリデーション: low/medium/high 以外は 400
+		p := *req.Priority
+		if p != "low" && p != "medium" && p != "high" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		priority = &p
+	}
+
 	in := usecase.UpdateTaskInput{
-		ID:          id,
-		Title:       req.Title,
-		Description: req.Description,
-		Status:      req.Status,
-		AssigneeID:  req.AssigneeID,
-		Priority:    req.Priority,
-		DueDate:     req.DueDate,
-		Now:         h.nowFunc(),
+		ID:       id,
+		Title:    trimmedTitle,
+		Status:   status,
+		Priority: priority,
+		Now:      h.nowFunc(),
 	}
 
 	t, err := h.updateUC.Execute(r.Context(), in)

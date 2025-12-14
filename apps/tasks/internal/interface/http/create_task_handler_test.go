@@ -220,7 +220,7 @@ func TestListTasksByProjectHandler_Success(t *testing.T) {
 	}
 }
 
-func TestUpdateTaskHandler_Success(t *testing.T) {
+func TestPatchTaskHandler_Success(t *testing.T) {
 	repo := taskinfra.NewMemoryTaskRepository()
 	createUC := &usecase.CreateTaskUsecase{Repo: repo}
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
@@ -230,10 +230,10 @@ func TestUpdateTaskHandler_Success(t *testing.T) {
 	ctx := context.Background()
 
 	// 事前にタスク作成
-	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+	createdTask, err := createUC.Execute(ctx, usecase.CreateTaskInput{
 		ID:          "task-1",
 		ProjectID:   "proj-1",
-		Title:       "initial",
+		Title:       "initial title",
 		Description: "desc",
 		Status:      string(domain.StatusTodo),
 		Priority:    string(domain.PriorityMedium),
@@ -243,14 +243,17 @@ func TestUpdateTaskHandler_Success(t *testing.T) {
 		t.Fatalf("failed to create task: %v", err)
 	}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	// 更新前の値を保存（UpdatedAt が更新されることを確認するため）
+	originalUpdatedAt := createdTask.UpdatedAt
+	originalCreatedAt := createdTask.CreatedAt
 
+	// 更新時は異なる時刻を使用（updatedAt が更新されることを確認するため）
+	updateTime := now.Add(1 * time.Hour)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+
+	// title のみを更新
 	body := map[string]string{
-		"title":      "updated title",
-		"status":     string(domain.StatusInProgress),
-		"dueDate":    "2025-02-01T12:00:00Z",
-		"assigneeId": "user-1",
-		"priority":   string(domain.PriorityHigh),
+		"title": "updated title",
 	}
 	b, _ := json.Marshal(body)
 
@@ -267,22 +270,425 @@ func TestUpdateTaskHandler_Success(t *testing.T) {
 	}
 
 	var respBody struct {
-		Title   string    `json:"title"`
-		Status  string    `json:"status"`
-		DueDate time.Time `json:"dueDate"`
+		ID          string    `json:"id"`
+		Title       string    `json:"title"`
+		Description string    `json:"description"`
+		Status      string    `json:"status"`
+		Priority    string    `json:"priority"`
+		CreatedAt   time.Time `json:"createdAt"`
+		UpdatedAt   time.Time `json:"updatedAt"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
 	if respBody.Title != "updated title" {
-		t.Errorf("expected updated title, got %s", respBody.Title)
+		t.Errorf("expected title 'updated title', got %s", respBody.Title)
 	}
+	// createdAt は維持される
+	if !respBody.CreatedAt.Equal(originalCreatedAt) {
+		t.Errorf("expected createdAt to be unchanged, got %v", respBody.CreatedAt)
+	}
+	// updatedAt は更新される
+	if !respBody.UpdatedAt.After(originalUpdatedAt) {
+		t.Errorf("expected updatedAt to be after %v, got %v", originalUpdatedAt, respBody.UpdatedAt)
+	}
+	// 他のフィールドは変更されない
+	if respBody.Description != createdTask.Description {
+		t.Errorf("expected description to be unchanged, got %s", respBody.Description)
+	}
+	if respBody.Status != string(createdTask.Status) {
+		t.Errorf("expected status to be unchanged, got %s", respBody.Status)
+	}
+}
+
+func TestPatchTaskHandler_AllFieldsNotProvided(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+
+	// 全フィールド未指定
+	body := map[string]interface{}{}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", res.StatusCode)
+	}
+}
+
+func TestPatchTaskHandler_TitleEmpty(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+
+	// title が空文字
+	body := map[string]string{
+		"title": "",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", res.StatusCode)
+	}
+}
+
+func TestPatchTaskHandler_TitleWhitespace(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+
+	// title が空白のみ
+	body := map[string]string{
+		"title": "   ",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", res.StatusCode)
+	}
+}
+
+func TestPatchTaskHandler_TaskNotFound(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+
+	body := map[string]string{
+		"title": "updated title",
+	}
+	b, _ := json.Marshal(body)
+
+	// 存在しないタスク ID
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/non-existent", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", res.StatusCode)
+	}
+}
+
+func TestPatchTaskHandler_UpdateStatus(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      string(domain.StatusTodo),
+		Priority:    string(domain.PriorityMedium),
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	updateTime := now.Add(1 * time.Hour)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+
+	// status のみを更新
+	body := map[string]string{
+		"status": "doing",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var respBody struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// status が "in_progress" に更新されていることを確認（domain の値）
 	if respBody.Status != string(domain.StatusInProgress) {
-		t.Errorf("expected status in_progress, got %s", respBody.Status)
+		t.Errorf("expected status 'in_progress', got %s", respBody.Status)
 	}
-	expectedDue := time.Date(2025, 2, 1, 12, 0, 0, 0, time.UTC)
-	if !respBody.DueDate.Equal(expectedDue) {
-		t.Errorf("expected dueDate %v, got %v", expectedDue, respBody.DueDate)
+}
+
+func TestPatchTaskHandler_UpdatePriority(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      string(domain.StatusTodo),
+		Priority:    string(domain.PriorityMedium),
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	updateTime := now.Add(1 * time.Hour)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+
+	// priority のみを更新
+	body := map[string]string{
+		"priority": "high",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var respBody struct {
+		Priority string `json:"priority"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if respBody.Priority != "high" {
+		t.Errorf("expected priority 'high', got %s", respBody.Priority)
+	}
+}
+
+func TestPatchTaskHandler_UpdateTitleAndStatus(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      string(domain.StatusTodo),
+		Priority:    string(domain.PriorityMedium),
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	updateTime := now.Add(1 * time.Hour)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+
+	// title と status を同時更新
+	body := map[string]string{
+		"title":  "x",
+		"status": "done",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var respBody struct {
+		Title  string `json:"title"`
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if respBody.Title != "x" {
+		t.Errorf("expected title 'x', got %s", respBody.Title)
+	}
+	if respBody.Status != string(domain.StatusDone) {
+		t.Errorf("expected status 'done', got %s", respBody.Status)
+	}
+}
+
+func TestPatchTaskHandler_UpdateStatusInProgress(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      string(domain.StatusTodo),
+		Priority:    string(domain.PriorityMedium),
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	updateTime := now.Add(1 * time.Hour)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+
+	// status を "in_progress" で更新
+	body := map[string]string{
+		"status": "in_progress",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var respBody struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// status が "in_progress" に更新されていることを確認（domain の値）
+	if respBody.Status != string(domain.StatusInProgress) {
+		t.Errorf("expected status 'in_progress', got %s", respBody.Status)
+	}
+}
+
+func TestPatchTaskHandler_InvalidStatus(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+
+	// 無効な status
+	body := map[string]string{
+		"status": "in-progress",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", res.StatusCode)
+	}
+}
+
+func TestPatchTaskHandler_InvalidPriority(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+
+	// 無効な priority
+	body := map[string]string{
+		"priority": "urgent",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", res.StatusCode)
 	}
 }

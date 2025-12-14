@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type Task = {
   id: string;
@@ -9,13 +9,139 @@ type Task = {
   description?: string;
   status: string;
   priority: string;
+  dueDate?: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 function generateTaskId() {
-  // 開発用なのでざっくりユニークなら OK
   return 'task-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+}
+
+function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () => void }) {
+  // Map "in_progress" from API response to "doing" for UI
+  const normalizeStatus = (s: string) => s === 'in_progress' ? 'doing' : s;
+  const denormalizeStatus = (s: string) => s === 'doing' ? 'in_progress' : s;
+
+  const [titleInput, setTitleInput] = useState<string>(task.title);
+  const [statusInput, setStatusInput] = useState<string>(normalizeStatus(task.status));
+  const [priorityInput, setPriorityInput] = useState<string>(task.priority);
+  const [updating, setUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  // task が変わったら inputs も更新（外部から更新された場合）
+  useEffect(() => {
+    setTitleInput(task.title);
+    setStatusInput(normalizeStatus(task.status));
+    setPriorityInput(task.priority);
+  }, [task.title, task.status, task.priority]);
+
+  const handleUpdate = async () => {
+    setUpdating(true);
+    setUpdateError(null);
+
+    try {
+      const body: { title?: string; status?: string; priority?: string } = {};
+      
+      // 変更されたフィールドだけを追加
+      if (titleInput !== task.title) {
+        body.title = titleInput;
+      }
+      if (statusInput !== normalizeStatus(task.status)) {
+        // API に送る時は "doing" をそのまま送る（ハンドラ側で "in_progress" にマッピングされる）
+        body.status = statusInput;
+      }
+      if (priorityInput !== task.priority) {
+        body.priority = priorityInput;
+      }
+
+      // 変更がない場合は何もしない
+      if (Object.keys(body).length === 0) {
+        setUpdating(false);
+        return;
+      }
+
+      const res = await fetch(`/api/dev/tasks?id=${encodeURIComponent(task.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const text = await res.text();
+      if (!res.ok) throw new Error(text);
+
+      // 成功したら一覧を再取得
+      onUpdateSuccess();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setUpdateError(msg);
+      alert(`Failed to update: ${msg}`);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const hasChanges = 
+    titleInput !== task.title ||
+    statusInput !== normalizeStatus(task.status) ||
+    priorityInput !== task.priority;
+
+  return (
+    <div className="text-sm border rounded-lg p-3 bg-gray-50 space-y-2">
+      <div><span className="font-medium">ID:</span> {task.id}</div>
+      <div><span className="font-medium">ProjectID:</span> {task.projectId}</div>
+      <div className="flex items-center gap-2">
+        <span className="font-medium">Title:</span>
+        <input
+          className="flex-1 border rounded px-2 py-1 text-sm"
+          value={titleInput}
+          onChange={(e) => setTitleInput(e.target.value)}
+          disabled={updating}
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="font-medium">Status:</span>
+        <select
+          className="flex-1 border rounded px-2 py-1 text-sm bg-white"
+          value={statusInput}
+          onChange={(e) => setStatusInput(e.target.value)}
+          disabled={updating}
+        >
+          <option value="todo">todo</option>
+          <option value="doing">doing</option>
+          <option value="done">done</option>
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="font-medium">Priority:</span>
+        <select
+          className="flex-1 border rounded px-2 py-1 text-sm bg-white"
+          value={priorityInput}
+          onChange={(e) => setPriorityInput(e.target.value)}
+          disabled={updating}
+        >
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleUpdate}
+          disabled={updating || !hasChanges || titleInput.trim() === ''}
+          className="px-3 py-1 border rounded text-sm disabled:opacity-60 bg-white"
+        >
+          {updating ? 'Updating...' : 'Update'}
+        </button>
+      </div>
+      {updateError && (
+        <div className="text-xs text-red-600 whitespace-pre-wrap">
+          Update Error: {updateError}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function DevTasksPage() {
@@ -28,13 +154,46 @@ export default function DevTasksPage() {
 
   const [loading, setLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [lastCreated, setLastCreated] = useState<Task | null>(null);
+
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  const projectIdForFetch = useMemo(() => projectId.trim(), [projectId]);
+
+  const fetchTasks = async (pid: string) => {
+    if (!pid) return;
+    setListLoading(true);
+    setListError(null);
+
+    try {
+      const res = await fetch(`/api/dev/tasks?projectId=${encodeURIComponent(pid)}`, {
+        method: 'GET',
+      });
+
+      const text = await res.text();
+      if (!res.ok) throw new Error(text);
+
+      const data = JSON.parse(text) as Task[];
+      setTasks(Array.isArray(data) ? data : []);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setListError(msg);
+      setTasks([]);
+    } finally {
+      setListLoading(false);
+    }
+  };
+
+  // projectId が変わったら自動で一覧更新
+  useEffect(() => {
+    void fetchTasks(projectIdForFetch);
+  }, [projectIdForFetch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setCreateError(null);
-    setLastCreated(null);
 
     try {
       const res = await fetch('/api/dev/tasks', {
@@ -53,13 +212,12 @@ export default function DevTasksPage() {
       const text = await res.text();
       if (!res.ok) throw new Error(text);
 
-      const data = JSON.parse(text) as Task;
-      setLastCreated(data);
-
-      // 送信が成功したら次のタスク用に ID を自動で振り直す
+      // 作成後に一覧を再取得（確実に全件が反映される）
       setId(generateTaskId());
-    } catch (err: any) {
-      setCreateError(err.message ?? String(err));
+      await fetchTasks(projectId.trim());
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setCreateError(msg);
     } finally {
       setLoading(false);
     }
@@ -89,6 +247,9 @@ export default function DevTasksPage() {
             value={projectId}
             onChange={(e) => setProjectId(e.target.value)}
           />
+          <p className="text-[11px] text-gray-500 mt-1">
+            入力した Project ID のタスク一覧を自動で取得して表示します。
+          </p>
         </div>
 
         <div>
@@ -129,30 +290,62 @@ export default function DevTasksPage() {
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-4 py-2 border rounded text-sm disabled:opacity-60"
-        >
-          {loading ? 'Sending...' : 'Create Task'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 border rounded text-sm disabled:opacity-60"
+          >
+            {loading ? 'Sending...' : 'Create Task'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void fetchTasks(projectId.trim())}
+            disabled={listLoading || !projectId.trim()}
+            className="px-4 py-2 border rounded text-sm disabled:opacity-60"
+          >
+            {listLoading ? 'Loading...' : 'Refresh List'}
+          </button>
+        </div>
       </form>
 
       {createError && (
         <div className="text-sm text-red-600 whitespace-pre-wrap">
-          Error: {createError}
+          Create Error: {createError}
         </div>
       )}
 
-      {lastCreated && (
-        <div className="text-sm border rounded-lg p-3 bg-gray-50 space-y-1">
-          <div><span className="font-medium">ID:</span> {lastCreated.id}</div>
-          <div><span className="font-medium">ProjectID:</span> {lastCreated.projectId}</div>
-          <div><span className="font-medium">Title:</span> {lastCreated.title}</div>
-          <div><span className="font-medium">Status:</span> {lastCreated.status}</div>
-          <div><span className="font-medium">Priority:</span> {lastCreated.priority}</div>
+      {listError && (
+        <div className="text-sm text-red-600 whitespace-pre-wrap">
+          List Error: {listError}
         </div>
       )}
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">
+            Tasks for <span className="font-mono">{projectIdForFetch || '(empty)'}</span>
+          </h2>
+          <span className="text-xs text-gray-500">
+            {listLoading ? 'loading...' : `${tasks.length} item(s)`}
+          </span>
+        </div>
+
+        {tasks.length === 0 && !listLoading && !listError && (
+          <div className="text-sm text-gray-600 border rounded-lg p-3">
+            タスクはありません（または projectId が不正です）
+          </div>
+        )}
+
+        {tasks.map((t) => (
+          <TaskRow
+            key={t.id}
+            task={t}
+            onUpdateSuccess={() => void fetchTasks(projectIdForFetch)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

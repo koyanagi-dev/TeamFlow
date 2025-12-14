@@ -78,6 +78,7 @@ func (t *Task) Update(
 	title *string,
 	description *string,
 	status *TaskStatus,
+	priority *TaskPriority,
 	dueDate *time.Time,
 	now time.Time,
 ) error {
@@ -97,6 +98,13 @@ func (t *Task) Update(
 			return errors.New("invalid task status")
 		}
 		t.Status = *status
+	}
+
+	if priority != nil {
+		if !isValidPriority(*priority) {
+			return errors.New("invalid task priority")
+		}
+		t.Priority = *priority
 	}
 
 	if dueDate != nil {

@@ -43,6 +43,12 @@ func (uc *UpdateTaskUsecase) Execute(ctx context.Context, in UpdateTaskInput) (*
 		status = &s
 	}
 
+	var priority *domain.TaskPriority
+	if in.Priority != nil {
+		p := domain.TaskPriority(*in.Priority)
+		priority = &p
+	}
+
 	var dueDate *time.Time
 	if in.DueDate != nil {
 		if *in.DueDate == "" {
@@ -55,7 +61,7 @@ func (uc *UpdateTaskUsecase) Execute(ctx context.Context, in UpdateTaskInput) (*
 		dueDate = &parsed
 	}
 
-	if err := existing.Update(in.Title, in.Description, status, dueDate, in.Now); err != nil {
+	if err := existing.Update(in.Title, in.Description, status, priority, dueDate, in.Now); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 
