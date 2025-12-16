@@ -96,8 +96,18 @@ func TestParseStatus(t *testing.T) {
 		}
 	})
 
+	t.Run("doing normalized to in_progress", func(t *testing.T) {
+		got, err := ParseStatus("doing")
+		if err != nil {
+			t.Fatalf("unexpected error for 'doing': %v", err)
+		}
+		if got != StatusInProgress {
+			t.Fatalf("expected StatusInProgress, got %s", got)
+		}
+	})
+
 	t.Run("invalid", func(t *testing.T) {
-		if _, err := ParseStatus("doing"); err == nil {
+		if _, err := ParseStatus("invalid-status"); err == nil {
 			t.Fatalf("expected error for invalid status")
 		}
 	})

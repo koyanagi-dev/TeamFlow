@@ -16,12 +16,17 @@ const (
 )
 
 // ParseStatus 正規の TaskStatus か検証し、型付きで返す。
+// "doing" は "in_progress" に正規化される。
 func ParseStatus(s string) (TaskStatus, error) {
+	input := s
+	if s == "doing" {
+		s = "in_progress"
+	}
 	switch TaskStatus(s) {
 	case StatusTodo, StatusInProgress, StatusDone:
 		return TaskStatus(s), nil
 	default:
-		return "", fmt.Errorf("invalid task status: %s", s)
+		return "", fmt.Errorf("invalid task status: %s", input)
 	}
 }
 

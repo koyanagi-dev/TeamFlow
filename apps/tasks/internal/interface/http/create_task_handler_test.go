@@ -87,6 +87,62 @@ func TestCreateTaskHandler_Success(t *testing.T) {
 	}
 }
 
+func TestCreateTaskHandler_StatusDoingNormalized(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+
+	body := map[string]string{
+		"id":          "task-1",
+		"projectId":   "proj-1",
+		"title":       "画面設計",
+		"description": "プロジェクト一覧画面のUIを設計する",
+		"status":      "doing",
+		"priority":    string(domain.PriorityMedium),
+	}
+
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("failed to marshal body: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/tasks", bytes.NewReader(b))
+	req = req.WithContext(context.Background())
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", res.StatusCode)
+	}
+
+	var respBody struct {
+		ID          string    `json:"id"`
+		ProjectID   string    `json:"projectId"`
+		Title       string    `json:"title"`
+		Description string    `json:"description"`
+		Status      string    `json:"status"`
+		Priority    string    `json:"priority"`
+		CreatedAt   time.Time `json:"createdAt"`
+		UpdatedAt   time.Time `json:"updatedAt"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// status が "in_progress" に正規化されていることを確認
+	if respBody.Status != string(domain.StatusInProgress) {
+		t.Errorf("expected status='in_progress', got=%s", respBody.Status)
+	}
+}
+
 func TestCreateTaskHandler_InvalidJSON(t *testing.T) {
 	repo := taskinfra.NewMemoryTaskRepository()
 	createUC := &usecase.CreateTaskUsecase{Repo: repo}
