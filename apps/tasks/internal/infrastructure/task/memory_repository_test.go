@@ -27,8 +27,8 @@ func TestMemoryTaskRepository_SaveAndListByProject(t *testing.T) {
 			ProjectID:   "proj-1",
 			Title:       "画面設計",
 			Description: "プロジェクト一覧画面のUIを設計する",
-			Status:      string(domain.StatusTodo),
-			Priority:    string(domain.PriorityMedium),
+			Status:      domain.StatusTodo,
+			Priority:    domain.PriorityMedium,
 			Now:         now,
 		},
 		{
@@ -36,8 +36,8 @@ func TestMemoryTaskRepository_SaveAndListByProject(t *testing.T) {
 			ProjectID:   "proj-1",
 			Title:       "API 設計",
 			Description: "Tasks API の設計",
-			Status:      string(domain.StatusTodo),
-			Priority:    string(domain.PriorityMedium),
+			Status:      domain.StatusTodo,
+			Priority:    domain.PriorityMedium,
 			Now:         now.Add(-1 * time.Hour), // より古い
 		},
 		{
@@ -45,8 +45,8 @@ func TestMemoryTaskRepository_SaveAndListByProject(t *testing.T) {
 			ProjectID:   "proj-2",
 			Title:       "別プロジェクトのタスク",
 			Description: "",
-			Status:      string(domain.StatusTodo),
-			Priority:    string(domain.PriorityMedium),
+			Status:      domain.StatusTodo,
+			Priority:    domain.PriorityMedium,
 			Now:         now.Add(-30 * time.Minute),
 		},
 	}

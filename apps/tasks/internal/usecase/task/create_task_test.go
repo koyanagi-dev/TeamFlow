@@ -107,8 +107,8 @@ func TestCreateTask_Success(t *testing.T) {
 		ProjectID:   "proj-1",
 		Title:       "画面設計",
 		Description: "説明",
-		Status:      "todo",
-		Priority:    "medium",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
 		Now:         now,
 	}
 
@@ -144,8 +144,8 @@ func TestCreateTask_RepositoryError(t *testing.T) {
 		ProjectID:   "proj-1",
 		Title:       "画面設計",
 		Description: "説明",
-		Status:      "todo",
-		Priority:    "medium",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
 		Now:         now,
 	}
 

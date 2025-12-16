@@ -157,8 +157,8 @@ func TestListTasksByProjectHandler_Success(t *testing.T) {
 			ProjectID:   "proj-1",
 			Title:       "画面設計",
 			Description: "一覧画面のUI設計",
-			Status:      string(domain.StatusTodo),
-			Priority:    string(domain.PriorityMedium),
+			Status:      domain.StatusTodo,
+			Priority:    domain.PriorityMedium,
 			Now:         now,
 		},
 		{
@@ -166,8 +166,8 @@ func TestListTasksByProjectHandler_Success(t *testing.T) {
 			ProjectID:   "proj-1",
 			Title:       "API設計",
 			Description: "Tasks API 設計",
-			Status:      string(domain.StatusTodo),
-			Priority:    string(domain.PriorityMedium),
+			Status:      domain.StatusTodo,
+			Priority:    domain.PriorityMedium,
 			Now:         now,
 		},
 		{
@@ -175,8 +175,8 @@ func TestListTasksByProjectHandler_Success(t *testing.T) {
 			ProjectID:   "proj-2",
 			Title:       "別プロジェクトのタスク",
 			Description: "",
-			Status:      string(domain.StatusTodo),
-			Priority:    string(domain.PriorityMedium),
+			Status:      domain.StatusTodo,
+			Priority:    domain.PriorityMedium,
 			Now:         now,
 		},
 	}
@@ -235,8 +235,8 @@ func TestPatchTaskHandler_Success(t *testing.T) {
 		ProjectID:   "proj-1",
 		Title:       "initial title",
 		Description: "desc",
-		Status:      string(domain.StatusTodo),
-		Priority:    string(domain.PriorityMedium),
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
 		Now:         now,
 	})
 	if err != nil {
@@ -423,8 +423,8 @@ func TestPatchTaskHandler_UpdateStatus(t *testing.T) {
 		ProjectID:   "proj-1",
 		Title:       "initial title",
 		Description: "desc",
-		Status:      string(domain.StatusTodo),
-		Priority:    string(domain.PriorityMedium),
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
 		Now:         now,
 	})
 	if err != nil {
@@ -480,8 +480,8 @@ func TestPatchTaskHandler_UpdatePriority(t *testing.T) {
 		ProjectID:   "proj-1",
 		Title:       "initial title",
 		Description: "desc",
-		Status:      string(domain.StatusTodo),
-		Priority:    string(domain.PriorityMedium),
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
 		Now:         now,
 	})
 	if err != nil {
@@ -536,8 +536,8 @@ func TestPatchTaskHandler_UpdateTitleAndStatus(t *testing.T) {
 		ProjectID:   "proj-1",
 		Title:       "initial title",
 		Description: "desc",
-		Status:      string(domain.StatusTodo),
-		Priority:    string(domain.PriorityMedium),
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
 		Now:         now,
 	})
 	if err != nil {
@@ -597,8 +597,8 @@ func TestPatchTaskHandler_UpdateStatusInProgress(t *testing.T) {
 		ProjectID:   "proj-1",
 		Title:       "initial title",
 		Description: "desc",
-		Status:      string(domain.StatusTodo),
-		Priority:    string(domain.PriorityMedium),
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
 		Now:         now,
 	})
 	if err != nil {

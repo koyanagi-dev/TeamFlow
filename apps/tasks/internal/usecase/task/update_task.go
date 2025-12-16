@@ -15,9 +15,9 @@ type UpdateTaskInput struct {
 	ID          string
 	Title       *string
 	Description *string
-	Status      *string
+	Status      *domain.TaskStatus
 	AssigneeID  *string
-	Priority    *string
+	Priority    *domain.TaskPriority
 	DueDate     *string
 	Now         time.Time
 }
@@ -37,18 +37,6 @@ func (uc *UpdateTaskUsecase) Execute(ctx context.Context, in UpdateTaskInput) (*
 		return nil, err
 	}
 
-	var status *domain.TaskStatus
-	if in.Status != nil {
-		s := domain.TaskStatus(*in.Status)
-		status = &s
-	}
-
-	var priority *domain.TaskPriority
-	if in.Priority != nil {
-		p := domain.TaskPriority(*in.Priority)
-		priority = &p
-	}
-
 	var dueDate *time.Time
 	if in.DueDate != nil {
 		if *in.DueDate == "" {
@@ -61,7 +49,7 @@ func (uc *UpdateTaskUsecase) Execute(ctx context.Context, in UpdateTaskInput) (*
 		dueDate = &parsed
 	}
 
-	if err := existing.Update(in.Title, in.Description, status, priority, dueDate, in.Now); err != nil {
+	if err := existing.Update(in.Title, in.Description, in.Status, in.Priority, dueDate, in.Now); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 

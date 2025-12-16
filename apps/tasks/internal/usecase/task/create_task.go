@@ -21,8 +21,8 @@ type CreateTaskInput struct {
 	ProjectID   string
 	Title       string
 	Description string
-	Status      string
-	Priority    string
+	Status      domain.TaskStatus
+	Priority    domain.TaskPriority
 	Now         time.Time
 }
 
@@ -33,10 +33,6 @@ type CreateTaskUsecase struct {
 
 // Execute は新しいタスクを作成し、リポジトリに保存する。
 func (uc *CreateTaskUsecase) Execute(ctx context.Context, in CreateTaskInput) (*domain.Task, error) {
-	// ドメイン層の型に変換（TaskStatus / TaskPriority はおそらく string ベースの型）
-	status := domain.TaskStatus(in.Status)
-	priority := domain.TaskPriority(in.Priority)
-
 	// いまは dueDate 未対応なので nil 固定
 	var dueDate *time.Time = nil
 
@@ -45,8 +41,8 @@ func (uc *CreateTaskUsecase) Execute(ctx context.Context, in CreateTaskInput) (*
 		in.ProjectID,
 		in.Title,
 		in.Description,
-		status,
-		priority,
+		in.Status,
+		in.Priority,
 		dueDate,
 		in.Now,
 	)

@@ -2,6 +2,7 @@ package task
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -14,6 +15,16 @@ const (
 	StatusDone       TaskStatus = "done"
 )
 
+// ParseStatus 正規の TaskStatus か検証し、型付きで返す。
+func ParseStatus(s string) (TaskStatus, error) {
+	switch TaskStatus(s) {
+	case StatusTodo, StatusInProgress, StatusDone:
+		return TaskStatus(s), nil
+	default:
+		return "", fmt.Errorf("invalid task status: %s", s)
+	}
+}
+
 // TaskPriority はタスクの優先度を表す型。
 type TaskPriority string
 
@@ -22,6 +33,16 @@ const (
 	PriorityMedium TaskPriority = "medium"
 	PriorityHigh   TaskPriority = "high"
 )
+
+// ParsePriority 正規の TaskPriority か検証し、型付きで返す。
+func ParsePriority(p string) (TaskPriority, error) {
+	switch TaskPriority(p) {
+	case PriorityLow, PriorityMedium, PriorityHigh:
+		return TaskPriority(p), nil
+	default:
+		return "", fmt.Errorf("invalid task priority: %s", p)
+	}
+}
 
 // Task は TeamFlow におけるタスクのドメインモデル。
 type Task struct {
@@ -51,12 +72,12 @@ func NewTask(
 		return nil, errors.New("task title must not be empty")
 	}
 
-	if !isValidStatus(status) {
-		return nil, errors.New("invalid task status")
+	if err := validateStatus(status); err != nil {
+		return nil, err
 	}
 
-	if !isValidPriority(priority) {
-		return nil, errors.New("invalid task priority")
+	if err := validatePriority(priority); err != nil {
+		return nil, err
 	}
 
 	return &Task{
@@ -94,15 +115,15 @@ func (t *Task) Update(
 	}
 
 	if status != nil {
-		if !isValidStatus(*status) {
-			return errors.New("invalid task status")
+		if err := validateStatus(*status); err != nil {
+			return err
 		}
 		t.Status = *status
 	}
 
 	if priority != nil {
-		if !isValidPriority(*priority) {
-			return errors.New("invalid task priority")
+		if err := validatePriority(*priority); err != nil {
+			return err
 		}
 		t.Priority = *priority
 	}
@@ -115,20 +136,16 @@ func (t *Task) Update(
 	return nil
 }
 
-func isValidStatus(s TaskStatus) bool {
-	switch s {
-	case StatusTodo, StatusInProgress, StatusDone:
-		return true
-	default:
-		return false
+func validateStatus(s TaskStatus) error {
+	if _, err := ParseStatus(string(s)); err != nil {
+		return errors.New("invalid task status")
 	}
+	return nil
 }
 
-func isValidPriority(p TaskPriority) bool {
-	switch p {
-	case PriorityLow, PriorityMedium, PriorityHigh:
-		return true
-	default:
-		return false
+func validatePriority(p TaskPriority) error {
+	if _, err := ParsePriority(string(p)); err != nil {
+		return errors.New("invalid task priority")
 	}
+	return nil
 }

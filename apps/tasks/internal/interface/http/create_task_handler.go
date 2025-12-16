@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	domain "teamflow-tasks/internal/domain/task"
 	usecase "teamflow-tasks/internal/usecase/task"
 )
 
@@ -92,13 +93,24 @@ func (h *TaskHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	status, err := parseStatusInput(req.Status)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	priority, err := parsePriorityInput(req.Priority)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	in := usecase.CreateTaskInput{
 		ID:          req.ID,
 		ProjectID:   req.ProjectID,
 		Title:       req.Title,
 		Description: req.Description,
-		Status:      req.Status,
-		Priority:    req.Priority,
+		Status:      status,
+		Priority:    priority,
 		Now:         h.nowFunc(),
 	}
 
@@ -215,32 +227,24 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 		trimmedTitle = &trimmed
 	}
 
-	var status *string
+	var status *domain.TaskStatus
 	if req.Status != nil {
-		// status バリデーション: todo/doing/done/in_progress 以外は 400
-		s := *req.Status
-		if s != "todo" && s != "doing" && s != "done" && s != "in_progress" {
+		parsed, err := parseStatusInput(*req.Status)
+		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		// "doing" を "in_progress" にマッピング
-		if s == "doing" {
-			mapped := "in_progress"
-			status = &mapped
-		} else {
-			status = &s
-		}
+		status = &parsed
 	}
 
-	var priority *string
+	var priority *domain.TaskPriority
 	if req.Priority != nil {
-		// priority バリデーション: low/medium/high 以外は 400
-		p := *req.Priority
-		if p != "low" && p != "medium" && p != "high" {
+		parsed, err := parsePriorityInput(*req.Priority)
+		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		priority = &p
+		priority = &parsed
 	}
 
 	in := usecase.UpdateTaskInput{
@@ -280,4 +284,20 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func parseStatusInput(raw string) (domain.TaskStatus, error) {
+	normalized := normalizeStatus(raw)
+	return domain.ParseStatus(normalized)
+}
+
+func parsePriorityInput(raw string) (domain.TaskPriority, error) {
+	return domain.ParsePriority(raw)
+}
+
+func normalizeStatus(raw string) string {
+	if raw == "doing" {
+		return string(domain.StatusInProgress)
+	}
+	return raw
 }
