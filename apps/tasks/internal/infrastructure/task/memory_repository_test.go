@@ -38,7 +38,7 @@ func TestMemoryTaskRepository_SaveAndListByProject(t *testing.T) {
 			Description: "Tasks API の設計",
 			Status:      string(domain.StatusTodo),
 			Priority:    string(domain.PriorityMedium),
-			Now:         now,
+			Now:         now.Add(-1 * time.Hour), // より古い
 		},
 		{
 			ID:          "task-3",
@@ -47,7 +47,7 @@ func TestMemoryTaskRepository_SaveAndListByProject(t *testing.T) {
 			Description: "",
 			Status:      string(domain.StatusTodo),
 			Priority:    string(domain.PriorityMedium),
-			Now:         now,
+			Now:         now.Add(-30 * time.Minute),
 		},
 	}
 
@@ -65,6 +65,10 @@ func TestMemoryTaskRepository_SaveAndListByProject(t *testing.T) {
 
 	if len(got) != 2 {
 		t.Fatalf("expected 2 tasks for proj-1, got %d", len(got))
+	}
+
+	if got[0].CreatedAt.After(got[1].CreatedAt) {
+		t.Fatalf("expected ascending order by CreatedAt, got %v then %v", got[0].CreatedAt, got[1].CreatedAt)
 	}
 
 	for _, task := range got {

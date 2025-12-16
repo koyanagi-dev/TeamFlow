@@ -39,7 +39,7 @@ func TestListTasksByProject_Success(t *testing.T) {
 		domain.TaskStatus("todo"),
 		domain.TaskPriority("medium"),
 		nil,
-		now,
+		now.Add(30*time.Minute),
 	)
 	t2, _ := domain.NewTask(
 		"task-2",
@@ -49,7 +49,7 @@ func TestListTasksByProject_Success(t *testing.T) {
 		domain.TaskStatus("todo"),
 		domain.TaskPriority("medium"),
 		nil,
-		now,
+		now.Add(-30*time.Minute), // より古い
 	)
 
 	repo := &listRepo{
@@ -69,5 +69,9 @@ func TestListTasksByProject_Success(t *testing.T) {
 
 	if len(got) != 2 {
 		t.Fatalf("expected 2 tasks, got %d", len(got))
+	}
+
+	if got[0].CreatedAt.After(got[1].CreatedAt) {
+		t.Fatalf("tasks are not sorted by CreatedAt ascending: %v then %v", got[0].CreatedAt, got[1].CreatedAt)
 	}
 }
