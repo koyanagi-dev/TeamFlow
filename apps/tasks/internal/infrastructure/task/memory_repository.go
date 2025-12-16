@@ -2,6 +2,7 @@ package taskinfra
 
 import (
 	"context"
+	"sort"
 
 	domain "teamflow-tasks/internal/domain/task"
 	usecase "teamflow-tasks/internal/usecase/task"
@@ -71,5 +72,9 @@ func (r *MemoryTaskRepository) ListByProject(_ context.Context, projectID string
 			out = append(out, t)
 		}
 	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
 	return out, nil
 }

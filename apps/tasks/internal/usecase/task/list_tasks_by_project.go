@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"sort"
 
 	domain "teamflow-tasks/internal/domain/task"
 )
@@ -18,5 +19,13 @@ type ListTasksByProjectInput struct {
 }
 
 func (uc *ListTasksByProjectUsecase) Execute(ctx context.Context, in ListTasksByProjectInput) ([]*domain.Task, error) {
-	return uc.Repo.ListByProject(ctx, in.ProjectID)
+	tasks, err := uc.Repo.ListByProject(ctx, in.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
+	})
+	return tasks, nil
 }
