@@ -52,8 +52,8 @@ func TestNewTask_Success(t *testing.T) {
 		"proj-1",
 		"画面設計",
 		"プロジェクト一覧画面のUIを設計する",
-		domain.TaskStatus("todo"),
-		domain.TaskPriority("medium"),
+		domain.StatusTodo,
+		domain.PriorityMedium,
 		nil, // dueDate
 		now,
 	)
@@ -83,8 +83,8 @@ func TestNewTask_InvalidTitle(t *testing.T) {
 		"proj-1",
 		"",
 		"説明",
-		domain.TaskStatus("todo"),
-		domain.TaskPriority("medium"),
+		domain.StatusTodo,
+		domain.PriorityMedium,
 		nil,
 		now,
 	)
@@ -107,8 +107,8 @@ func TestCreateTask_Success(t *testing.T) {
 		ProjectID:   "proj-1",
 		Title:       "画面設計",
 		Description: "説明",
-		Status:      "todo",
-		Priority:    "medium",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
 		Now:         now,
 	}
 
@@ -144,8 +144,8 @@ func TestCreateTask_RepositoryError(t *testing.T) {
 		ProjectID:   "proj-1",
 		Title:       "画面設計",
 		Description: "説明",
-		Status:      "todo",
-		Priority:    "medium",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
 		Now:         now,
 	}
 

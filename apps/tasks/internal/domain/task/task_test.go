@@ -82,3 +82,53 @@ func TestNewTask_InvalidStatus(t *testing.T) {
 		t.Fatalf("expected error for invalid status, got nil")
 	}
 }
+
+func TestParseStatus(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		for _, s := range []string{"todo", "in_progress", "done"} {
+			got, err := ParseStatus(s)
+			if err != nil {
+				t.Fatalf("unexpected error for %s: %v", s, err)
+			}
+			if string(got) != s {
+				t.Fatalf("expected %s, got %s", s, got)
+			}
+		}
+	})
+
+	t.Run("doing normalized to in_progress", func(t *testing.T) {
+		got, err := ParseStatus("doing")
+		if err != nil {
+			t.Fatalf("unexpected error for 'doing': %v", err)
+		}
+		if got != StatusInProgress {
+			t.Fatalf("expected StatusInProgress, got %s", got)
+		}
+	})
+
+	t.Run("invalid", func(t *testing.T) {
+		if _, err := ParseStatus("invalid-status"); err == nil {
+			t.Fatalf("expected error for invalid status")
+		}
+	})
+}
+
+func TestParsePriority(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		for _, p := range []string{"low", "medium", "high"} {
+			got, err := ParsePriority(p)
+			if err != nil {
+				t.Fatalf("unexpected error for %s: %v", p, err)
+			}
+			if string(got) != p {
+				t.Fatalf("expected %s, got %s", p, got)
+			}
+		}
+	})
+
+	t.Run("invalid", func(t *testing.T) {
+		if _, err := ParsePriority("urgent"); err == nil {
+			t.Fatalf("expected error for invalid priority")
+		}
+	})
+}

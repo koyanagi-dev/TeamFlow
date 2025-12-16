@@ -36,8 +36,8 @@ func TestListTasksByProject_Success(t *testing.T) {
 		"proj-1",
 		"T1",
 		"",
-		domain.TaskStatus("todo"),
-		domain.TaskPriority("medium"),
+		domain.StatusTodo,
+		domain.PriorityMedium,
 		nil,
 		now.Add(30*time.Minute),
 	)
@@ -46,8 +46,8 @@ func TestListTasksByProject_Success(t *testing.T) {
 		"proj-1",
 		"T2",
 		"",
-		domain.TaskStatus("todo"),
-		domain.TaskPriority("medium"),
+		domain.StatusTodo,
+		domain.PriorityMedium,
 		nil,
 		now.Add(-30*time.Minute), // より古い
 	)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	domain "teamflow-tasks/internal/domain/task"
 	usecase "teamflow-tasks/internal/usecase/task"
 )
 
@@ -63,7 +64,7 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		id := strings.TrimPrefix(r.URL.Path, "/tasks/")
 		if id == "" || strings.Contains(id, "/") {
-			w.WriteHeader(http.StatusBadRequest)
+			writeErrorResponse(w, http.StatusBadRequest, "validation error", "invalid task id")
 			return
 		}
 		h.handleUpdate(w, r, id)
@@ -88,7 +89,18 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *TaskHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req createTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writeErrorResponse(w, http.StatusBadRequest, "invalid json", err.Error())
+		return
+	}
+
+	status, err := domain.ParseStatus(req.Status)
+	if err != nil {
+		writeErrorResponse(w, http.StatusBadRequest, "invalid status", err.Error())
+		return
+	}
+	priority, err := domain.ParsePriority(req.Priority)
+	if err != nil {
+		writeErrorResponse(w, http.StatusBadRequest, "invalid priority", err.Error())
 		return
 	}
 
@@ -97,15 +109,15 @@ func (h *TaskHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		ProjectID:   req.ProjectID,
 		Title:       req.Title,
 		Description: req.Description,
-		Status:      req.Status,
-		Priority:    req.Priority,
+		Status:      status,
+		Priority:    priority,
 		Now:         h.nowFunc(),
 	}
 
 	t, err := h.createUC.Execute(r.Context(), in)
 	if err != nil {
 		// バリデーションエラーなどは 400 として扱う（簡易実装）
-		w.WriteHeader(http.StatusBadRequest)
+		writeErrorResponse(w, http.StatusBadRequest, "validation error", err.Error())
 		return
 	}
 
@@ -136,7 +148,7 @@ func (h *TaskHandler) handleListByProject(w http.ResponseWriter, r *http.Request
 	assigneeId := r.URL.Query().Get("assigneeId")
 	projectID := r.URL.Query().Get("projectId")
 	if projectID == "" {
-		w.WriteHeader(http.StatusBadRequest)
+		writeErrorResponse(w, http.StatusBadRequest, "validation error", "projectId is required")
 		return
 	}
 
@@ -194,13 +206,13 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 
 	var req PatchTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writeErrorResponse(w, http.StatusBadRequest, "invalid json", err.Error())
 		return
 	}
 
 	// 全部 nil チェック
 	if req.Title == nil && req.Status == nil && req.Priority == nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writeErrorResponse(w, http.StatusBadRequest, "validation error", "at least one field must be provided")
 		return
 	}
 
@@ -209,38 +221,30 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 		// title が空文字または空白のみの場合は 400
 		trimmed := strings.TrimSpace(*req.Title)
 		if trimmed == "" {
-			w.WriteHeader(http.StatusBadRequest)
+			writeErrorResponse(w, http.StatusBadRequest, "validation error", "task title must not be empty")
 			return
 		}
 		trimmedTitle = &trimmed
 	}
 
-	var status *string
+	var status *domain.TaskStatus
 	if req.Status != nil {
-		// status バリデーション: todo/doing/done/in_progress 以外は 400
-		s := *req.Status
-		if s != "todo" && s != "doing" && s != "done" && s != "in_progress" {
-			w.WriteHeader(http.StatusBadRequest)
+		parsed, err := domain.ParseStatus(*req.Status)
+		if err != nil {
+			writeErrorResponse(w, http.StatusBadRequest, "invalid status", err.Error())
 			return
 		}
-		// "doing" を "in_progress" にマッピング
-		if s == "doing" {
-			mapped := "in_progress"
-			status = &mapped
-		} else {
-			status = &s
-		}
+		status = &parsed
 	}
 
-	var priority *string
+	var priority *domain.TaskPriority
 	if req.Priority != nil {
-		// priority バリデーション: low/medium/high 以外は 400
-		p := *req.Priority
-		if p != "low" && p != "medium" && p != "high" {
-			w.WriteHeader(http.StatusBadRequest)
+		parsed, err := domain.ParsePriority(*req.Priority)
+		if err != nil {
+			writeErrorResponse(w, http.StatusBadRequest, "invalid priority", err.Error())
 			return
 		}
-		priority = &p
+		priority = &parsed
 	}
 
 	in := usecase.UpdateTaskInput{
@@ -258,7 +262,7 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 			return
 		}
 		if errors.Is(err, usecase.ErrInvalidInput) {
-			w.WriteHeader(http.StatusBadRequest)
+			writeErrorResponse(w, http.StatusBadRequest, "validation error", err.Error())
 			return
 		}
 		w.WriteHeader(http.StatusInternalServerError)
@@ -279,5 +283,20 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+type errorResponse struct {
+	Error  string `json:"error"`
+	Detail string `json:"detail"`
+}
+
+func writeErrorResponse(w http.ResponseWriter, statusCode int, errorMsg, detail string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	resp := errorResponse{
+		Error:  errorMsg,
+		Detail: detail,
+	}
 	_ = json.NewEncoder(w).Encode(resp)
 }
