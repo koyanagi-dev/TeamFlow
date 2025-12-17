@@ -748,3 +748,139 @@ func TestPatchTaskHandler_InvalidPriority(t *testing.T) {
 		t.Fatalf("expected status 400, got %d", res.StatusCode)
 	}
 }
+
+func TestPatchTaskHandler_UpdateDescription(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "initial description",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	updateTime := now.Add(1 * time.Hour)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+
+	// description のみを更新
+	body := map[string]string{
+		"description": "updated description",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var respBody struct {
+		ID          string    `json:"id"`
+		Title       string    `json:"title"`
+		Description string    `json:"description"`
+		Status      string    `json:"status"`
+		Priority    string    `json:"priority"`
+		CreatedAt   time.Time `json:"createdAt"`
+		UpdatedAt   time.Time `json:"updatedAt"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if respBody.Description != "updated description" {
+		t.Errorf("expected description 'updated description', got %s", respBody.Description)
+	}
+	// 他のフィールドは変更されない
+	if respBody.Title != "initial title" {
+		t.Errorf("expected title to be unchanged, got %s", respBody.Title)
+	}
+	if respBody.Status != string(domain.StatusTodo) {
+		t.Errorf("expected status to be unchanged, got %s", respBody.Status)
+	}
+}
+
+func TestPatchTaskHandler_UpdateDescriptionToNull(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成（description あり）
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "initial description",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	updateTime := now.Add(1 * time.Hour)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+
+	// description を null で更新（説明を消す）
+	body := map[string]interface{}{
+		"description": nil,
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var respBody struct {
+		ID          string    `json:"id"`
+		Title       string    `json:"title"`
+		Description string    `json:"description"`
+		Status      string    `json:"status"`
+		Priority    string    `json:"priority"`
+		CreatedAt   time.Time `json:"createdAt"`
+		UpdatedAt   time.Time `json:"updatedAt"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// description が空文字列になっていることを確認（null で消された）
+	if respBody.Description != "" {
+		t.Errorf("expected description to be empty string, got %s", respBody.Description)
+	}
+	// 他のフィールドは変更されない
+	if respBody.Title != "initial title" {
+		t.Errorf("expected title to be unchanged, got %s", respBody.Title)
+	}
+}
