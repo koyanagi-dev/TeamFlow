@@ -57,6 +57,7 @@ type Task struct {
 	Description string
 	Status      TaskStatus
 	Priority    TaskPriority
+	AssigneeID  *string
 	DueDate     *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -105,6 +106,7 @@ func (t *Task) Update(
 	description *string,
 	status *TaskStatus,
 	priority *TaskPriority,
+	assigneeID *string,
 	dueDate *time.Time,
 	now time.Time,
 ) error {
@@ -133,9 +135,13 @@ func (t *Task) Update(
 		t.Priority = *priority
 	}
 
-	if dueDate != nil {
-		t.DueDate = dueDate
-	}
+	// assigneeID は nil かどうかに関わらず設定する
+	// nil が渡された場合は明示的に nil を設定する（担当者を外す）
+	// ただし、これは呼び出し側で「未指定」と「null」を区別できることが前提
+	// 実際には、呼び出し側（usecase層）で「未指定」の場合は nil を渡さないようにする必要がある
+	// ここでは単純に、渡された値をそのまま設定する
+	// 「未指定」の場合は、usecase層で nil を渡さないようにする
+	t.AssigneeID = assigneeID
 
 	t.UpdatedAt = now
 	return nil

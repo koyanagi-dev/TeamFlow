@@ -11,6 +11,30 @@ import (
 	usecase "teamflow-tasks/internal/usecase/task"
 )
 
+// OptionalString は JSON で null と未指定を区別するための型。
+// - 未指定: nil
+// - null: &OptionalString{Value: nil, IsSet: true}
+// - 値あり: &OptionalString{Value: &str, IsSet: true}
+type OptionalString struct {
+	Value *string
+	IsSet bool
+}
+
+// UnmarshalJSON は JSON を Unmarshal し、null と未指定を区別する。
+func (o *OptionalString) UnmarshalJSON(data []byte) error {
+	o.IsSet = true
+	if string(data) == "null" {
+		o.Value = nil
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	o.Value = &s
+	return nil
+}
+
 // TaskHandler は /tasks を処理する HTTP ハンドラ。
 // - POST: タスク作成
 // - GET : projectId ごとのタスク一覧取得
@@ -51,6 +75,7 @@ type taskResponse struct {
 	Description string     `json:"description"`
 	Status      string     `json:"status"`
 	Priority    string     `json:"priority"`
+	AssigneeID  *string    `json:"assigneeId"`
 	DueDate     *time.Time `json:"dueDate"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
@@ -128,6 +153,7 @@ func (h *TaskHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		Description: t.Description,
 		Status:      string(t.Status),   // ★ TaskStatus → string
 		Priority:    string(t.Priority), // ★ TaskPriority → string
+		AssigneeID:  t.AssigneeID,
 		DueDate:     t.DueDate,
 		CreatedAt:   t.CreatedAt,
 		UpdatedAt:   t.UpdatedAt,
@@ -171,6 +197,7 @@ func (h *TaskHandler) handleListByProject(w http.ResponseWriter, r *http.Request
 			Description: t.Description,
 			Status:      string(t.Status),   // ★ ここも string に変換
 			Priority:    string(t.Priority), // ★
+			AssigneeID:  t.AssigneeID,
 			DueDate:     t.DueDate,
 			CreatedAt:   t.CreatedAt,
 			UpdatedAt:   t.UpdatedAt,
@@ -193,9 +220,10 @@ type updateTaskRequest struct {
 
 // PatchTaskRequest は PATCH /api/tasks/{id} のリクエストボディ。
 type PatchTaskRequest struct {
-	Title    *string `json:"title"`
-	Status   *string `json:"status"`
-	Priority *string `json:"priority"`
+	Title     *string        `json:"title"`
+	Status    *string        `json:"status"`
+	Priority  *string        `json:"priority"`
+	AssigneeID OptionalString `json:"assigneeId"`
 }
 
 func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id string) {
@@ -211,7 +239,7 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 	}
 
 	// 全部 nil チェック
-	if req.Title == nil && req.Status == nil && req.Priority == nil {
+	if req.Title == nil && req.Status == nil && req.Priority == nil && !req.AssigneeID.IsSet {
 		writeErrorResponse(w, http.StatusBadRequest, "validation error", "at least one field must be provided")
 		return
 	}
@@ -247,12 +275,29 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 		priority = &parsed
 	}
 
+	var assigneeID *string
+	if req.AssigneeID.IsSet {
+		if req.AssigneeID.Value != nil {
+			// UUID 形式のバリデーション
+			uuidStr := *req.AssigneeID.Value
+			if !isValidUUID(uuidStr) {
+				writeErrorResponse(w, http.StatusBadRequest, "validation error", "assigneeId must be a valid UUID")
+				return
+			}
+			assigneeID = req.AssigneeID.Value
+		} else {
+			// null が指定された場合は空文字列へのポインタではなく、nil を設定
+			assigneeID = nil
+		}
+	}
+
 	in := usecase.UpdateTaskInput{
-		ID:       id,
-		Title:    trimmedTitle,
-		Status:   status,
-		Priority: priority,
-		Now:      h.nowFunc(),
+		ID:         id,
+		Title:      trimmedTitle,
+		Status:     status,
+		Priority:   priority,
+		AssigneeID: assigneeID,
+		Now:        h.nowFunc(),
 	}
 
 	t, err := h.updateUC.Execute(r.Context(), in)
@@ -276,6 +321,7 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 		Description: t.Description,
 		Status:      string(t.Status),
 		Priority:    string(t.Priority),
+		AssigneeID:  t.AssigneeID,
 		DueDate:     t.DueDate,
 		CreatedAt:   t.CreatedAt,
 		UpdatedAt:   t.UpdatedAt,
@@ -299,4 +345,28 @@ func writeErrorResponse(w http.ResponseWriter, statusCode int, errorMsg, detail 
 		Detail: detail,
 	}
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// isValidUUID は文字列が有効な UUID 形式かどうかをチェックする。
+func isValidUUID(s string) bool {
+	// UUID 形式: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (36文字)
+	if len(s) != 36 {
+		return false
+	}
+	parts := strings.Split(s, "-")
+	if len(parts) != 5 {
+		return false
+	}
+	expectedLengths := []int{8, 4, 4, 4, 12}
+	for i, part := range parts {
+		if len(part) != expectedLengths[i] {
+			return false
+		}
+		for _, r := range part {
+			if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
 }
