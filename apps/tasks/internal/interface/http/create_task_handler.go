@@ -191,11 +191,64 @@ type updateTaskRequest struct {
 	DueDate     *string `json:"dueDate"`
 }
 
+// NullableString は null と未指定を区別するためのカスタム型。
+// null を受け取った場合は IsNull が true になり、未指定の場合は nil のまま。
+type NullableString struct {
+	Value   *string
+	IsNull  bool
+}
+
+// UnmarshalJSON は JSON の null と未指定を区別する。
+func (n *NullableString) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		n.IsNull = true
+		n.Value = nil
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	n.Value = &s
+	n.IsNull = false
+	return nil
+}
+
 // PatchTaskRequest は PATCH /api/tasks/{id} のリクエストボディ。
 type PatchTaskRequest struct {
-	Title    *string `json:"title"`
-	Status   *string `json:"status"`
-	Priority *string `json:"priority"`
+	Title    *string        `json:"title"`
+	Status   *string        `json:"status"`
+	Priority *string        `json:"priority"`
+	DueDate  NullableString `json:"dueDate,omitempty"`
+}
+
+// UnmarshalJSON は JSON をパースし、dueDate の null と未指定を区別する。
+func (p *PatchTaskRequest) UnmarshalJSON(data []byte) error {
+	// 一時的な構造体を使用して JSON をパース
+	type Alias PatchTaskRequest
+	aux := &struct {
+		DueDate json.RawMessage `json:"dueDate"`
+		*Alias
+	}{
+		Alias: (*Alias)(p),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// dueDate が指定されている場合のみ処理
+	// aux.DueDate が nil の場合は未指定、null の場合は []byte("null")
+	if len(aux.DueDate) > 0 {
+		if err := p.DueDate.UnmarshalJSON(aux.DueDate); err != nil {
+			return err
+		}
+	} else {
+		// 未指定の場合は IsNull = false, Value = nil のまま
+		p.DueDate = NullableString{IsNull: false, Value: nil}
+	}
+
+	return nil
 }
 
 func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id string) {
@@ -210,8 +263,9 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 
-	// 全部 nil チェック
-	if req.Title == nil && req.Status == nil && req.Priority == nil {
+	// 全部 nil チェック（dueDate は IsNull または Value が nil でない場合に指定されているとみなす）
+	dueDateProvided := req.DueDate.IsNull || req.DueDate.Value != nil
+	if req.Title == nil && req.Status == nil && req.Priority == nil && !dueDateProvided {
 		writeErrorResponse(w, http.StatusBadRequest, "validation error", "at least one field must be provided")
 		return
 	}
@@ -247,11 +301,29 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 		priority = &parsed
 	}
 
+	var dueDate *string
+	if dueDateProvided {
+		if req.DueDate.IsNull {
+			// null の場合は空文字列を渡して削除を指示（usecase で処理）
+			empty := ""
+			dueDate = &empty
+		} else if req.DueDate.Value != nil {
+			// RFC3339 形式の検証
+			_, err := time.Parse(time.RFC3339, *req.DueDate.Value)
+			if err != nil {
+				writeErrorResponse(w, http.StatusBadRequest, "validation error", "dueDate must be RFC3339 format")
+				return
+			}
+			dueDate = req.DueDate.Value
+		}
+	}
+
 	in := usecase.UpdateTaskInput{
 		ID:       id,
 		Title:    trimmedTitle,
 		Status:   status,
 		Priority: priority,
+		DueDate:  dueDate,
 		Now:      h.nowFunc(),
 	}
 

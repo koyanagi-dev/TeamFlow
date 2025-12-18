@@ -37,16 +37,20 @@ func (uc *UpdateTaskUsecase) Execute(ctx context.Context, in UpdateTaskInput) (*
 		return nil, err
 	}
 
-	var dueDate *time.Time
+	var dueDate **time.Time
 	if in.DueDate != nil {
 		if *in.DueDate == "" {
-			return nil, fmt.Errorf("%w: dueDate must be RFC3339 when provided", ErrInvalidInput)
+			// 空文字列の場合は &nil を渡して削除を指示
+			var nilTime *time.Time
+			dueDate = &nilTime
+		} else {
+			parsed, err := time.Parse(time.RFC3339, *in.DueDate)
+			if err != nil {
+				return nil, fmt.Errorf("%w: dueDate must be RFC3339: %v", ErrInvalidInput, err)
+			}
+			parsedPtr := &parsed
+			dueDate = &parsedPtr
 		}
-		parsed, err := time.Parse(time.RFC3339, *in.DueDate)
-		if err != nil {
-			return nil, fmt.Errorf("%w: dueDate must be RFC3339: %v", ErrInvalidInput, err)
-		}
-		dueDate = &parsed
 	}
 
 	if err := existing.Update(in.Title, in.Description, in.Status, in.Priority, dueDate, in.Now); err != nil {

@@ -748,3 +748,211 @@ func TestPatchTaskHandler_InvalidPriority(t *testing.T) {
 		t.Fatalf("expected status 400, got %d", res.StatusCode)
 	}
 }
+
+func TestPatchTaskHandler_UpdateDueDate(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	updateTime := now.Add(1 * time.Hour)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+
+	// dueDate のみを更新（RFC3339形式）
+	dueDateStr := "2025-12-31T23:59:59Z"
+	body := map[string]interface{}{
+		"dueDate": dueDateStr,
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var respBody struct {
+		DueDate   *time.Time `json:"dueDate"`
+		UpdatedAt time.Time  `json:"updatedAt"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if respBody.DueDate == nil {
+		t.Errorf("expected dueDate to be set, got nil")
+	} else {
+		expected, _ := time.Parse(time.RFC3339, dueDateStr)
+		if !respBody.DueDate.Equal(expected) {
+			t.Errorf("expected dueDate %v, got %v", expected, respBody.DueDate)
+		}
+	}
+	if !respBody.UpdatedAt.After(now) {
+		t.Errorf("expected updatedAt to be after %v, got %v", now, respBody.UpdatedAt)
+	}
+}
+
+func TestPatchTaskHandler_DeleteDueDate(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	// まず dueDate を設定（異なる時刻を使用して updatedAt を更新）
+	setDueDateTime := now.Add(1 * time.Hour)
+	dueDate := now.Add(24 * time.Hour)
+	dueDateStr := dueDate.Format(time.RFC3339)
+	_, err = updateUC.Execute(ctx, usecase.UpdateTaskInput{
+		ID:      "task-1",
+		DueDate: &dueDateStr,
+		Now:     setDueDateTime,
+	})
+	if err != nil {
+		t.Fatalf("failed to set dueDate: %v", err)
+	}
+
+	// updateTime は updatedTask.UpdatedAt より後の時刻にする
+	updateTime := setDueDateTime.Add(2 * time.Hour)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+
+	// dueDate: null で削除
+	body := map[string]interface{}{
+		"dueDate": nil,
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errorResp struct {
+			Error  string `json:"error"`
+			Detail string `json:"detail"`
+		}
+		if err := json.NewDecoder(res.Body).Decode(&errorResp); err == nil {
+			t.Fatalf("expected status 200, got %d: error=%s, detail=%s", res.StatusCode, errorResp.Error, errorResp.Detail)
+		}
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var respBody struct {
+		DueDate   *time.Time `json:"dueDate"`
+		UpdatedAt time.Time  `json:"updatedAt"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if respBody.DueDate != nil {
+		t.Errorf("expected dueDate to be nil (deleted), got %v", respBody.DueDate)
+	}
+	// updatedAt が updateTime と同じであることを確認
+	if !respBody.UpdatedAt.Equal(updateTime) {
+		t.Errorf("expected updatedAt to be %v, got %v", updateTime, respBody.UpdatedAt)
+	}
+	// updatedAt が setDueDateTime より後であることを確認
+	if !respBody.UpdatedAt.After(setDueDateTime) {
+		t.Errorf("expected updatedAt to be after %v, got %v", setDueDateTime, respBody.UpdatedAt)
+	}
+}
+
+func TestPatchTaskHandler_InvalidDueDate(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+
+	// 無効な dueDate 形式
+	body := map[string]interface{}{
+		"dueDate": "invalid-date",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", res.StatusCode)
+	}
+
+	var errorResp struct {
+		Error  string `json:"error"`
+		Detail string `json:"detail"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&errorResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+
+	if errorResp.Error == "" {
+		t.Errorf("expected error message, got empty")
+	}
+}

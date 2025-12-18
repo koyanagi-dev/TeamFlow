@@ -100,12 +100,13 @@ func NewTask(
 
 // Update はタスクの一部または全てのフィールドを更新する。
 // nil のフィールドは変更しない。
+// dueDate は **time.Time で、nil = 未指定、&nil = 削除、&time = 更新 を表す。
 func (t *Task) Update(
 	title *string,
 	description *string,
 	status *TaskStatus,
 	priority *TaskPriority,
-	dueDate *time.Time,
+	dueDate **time.Time,
 	now time.Time,
 ) error {
 	if title != nil {
@@ -134,7 +135,8 @@ func (t *Task) Update(
 	}
 
 	if dueDate != nil {
-		t.DueDate = dueDate
+		// dueDate が &nil の場合は削除、&time の場合は更新
+		t.DueDate = *dueDate
 	}
 
 	t.UpdatedAt = now
