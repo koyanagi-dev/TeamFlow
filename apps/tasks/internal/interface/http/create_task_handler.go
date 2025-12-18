@@ -191,11 +191,47 @@ type updateTaskRequest struct {
 	DueDate     *string `json:"dueDate"`
 }
 
+// nullableString は JSON で null を受け取ることができる文字列型。
+// UnmarshalJSON で null と未指定を区別するため、null の場合は存在フラグを立てる。
+type nullableString struct {
+	value   *string
+	isNull  bool
+	present bool
+}
+
+func (ns *nullableString) UnmarshalJSON(data []byte) error {
+	ns.present = true
+	var s *string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	if s == nil {
+		ns.isNull = true
+		ns.value = nil
+	} else {
+		ns.isNull = false
+		ns.value = s
+	}
+	return nil
+}
+
+func (ns *nullableString) toPtr() *string {
+	if !ns.present {
+		return nil // 未指定
+	}
+	if ns.isNull {
+		empty := ""
+		return &empty // null の場合は空文字列を返す
+	}
+	return ns.value // 文字列が指定された場合
+}
+
 // PatchTaskRequest は PATCH /api/tasks/{id} のリクエストボディ。
 type PatchTaskRequest struct {
-	Title    *string `json:"title"`
-	Status   *string `json:"status"`
-	Priority *string `json:"priority"`
+	Title       *string        `json:"title"`
+	Description nullableString `json:"description"`
+	Status      *string        `json:"status"`
+	Priority    *string        `json:"priority"`
 }
 
 func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id string) {
@@ -211,7 +247,8 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 	}
 
 	// 全部 nil チェック
-	if req.Title == nil && req.Status == nil && req.Priority == nil {
+	descPresent := req.Description.present
+	if req.Title == nil && req.Status == nil && req.Priority == nil && !descPresent {
 		writeErrorResponse(w, http.StatusBadRequest, "validation error", "at least one field must be provided")
 		return
 	}
@@ -247,12 +284,15 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 		priority = &parsed
 	}
 
+	description := req.Description.toPtr()
+
 	in := usecase.UpdateTaskInput{
-		ID:       id,
-		Title:    trimmedTitle,
-		Status:   status,
-		Priority: priority,
-		Now:      h.nowFunc(),
+		ID:          id,
+		Title:       trimmedTitle,
+		Description: description,
+		Status:      status,
+		Priority:    priority,
+		Now:         h.nowFunc(),
 	}
 
 	t, err := h.updateUC.Execute(r.Context(), in)
