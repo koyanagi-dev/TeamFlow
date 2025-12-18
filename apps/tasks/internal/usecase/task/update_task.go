@@ -49,7 +49,7 @@ func (uc *UpdateTaskUsecase) Execute(ctx context.Context, in UpdateTaskInput) (*
 		dueDate = &parsed
 	}
 
-	if err := existing.Update(in.Title, in.Description, in.Status, in.Priority, dueDate, in.Now); err != nil {
+	if err := existing.Update(in.Title, in.Description, in.Status, in.Priority, in.AssigneeID, dueDate, in.Now); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 
