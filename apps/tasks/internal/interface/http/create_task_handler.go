@@ -255,11 +255,12 @@ func (ns *nullableString) toPtr() *string {
 
 // PatchTaskRequest は PATCH /api/tasks/{id} のリクエストボディ。
 type PatchTaskRequest struct {
-	Title       *string         `json:"title"`
-	Description nullableString  `json:"description"`
-	Status    *string        `json:"status"`
-	Priority  *string        `json:"priority"`
-	AssigneeID OptionalString `json:"assigneeId"`
+	Title       *string        `json:"title"`
+	Description nullableString `json:"description"`
+	Status      *string        `json:"status"`
+	Priority    *string        `json:"priority"`
+	AssigneeID  OptionalString `json:"assigneeId"`
+	DueDate     nullableString `json:"dueDate"`
 }
 
 func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id string) {
@@ -329,8 +330,20 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 		}
 	}
 
-	// DueDate は現在の HTTP ハンドラでは処理されていない
+	// DueDate
 	var dueDatePatch domain.Patch[time.Time]
+	if req.DueDate.present {
+		if req.DueDate.isNull {
+			dueDatePatch = domain.Null[time.Time]()
+		} else {
+			parsed, err := time.Parse(time.RFC3339, *req.DueDate.value)
+			if err != nil {
+				writeErrorResponse(w, http.StatusBadRequest, "validation error", "dueDate must be RFC3339")
+				return
+			}
+			dueDatePatch = domain.Set(parsed)
+		}
+	}
 
 	in := usecase.UpdateTaskInput{
 		ID:          id,
