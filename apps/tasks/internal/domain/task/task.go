@@ -99,54 +99,6 @@ func NewTask(
 	}, nil
 }
 
-// Update はタスクの一部または全てのフィールドを更新する。
-// nil のフィールドは変更しない。
-func (t *Task) Update(
-	title *string,
-	description *string,
-	status *TaskStatus,
-	priority *TaskPriority,
-	assigneeID *string,
-	dueDate *time.Time,
-	now time.Time,
-) error {
-	if title != nil {
-		if *title == "" {
-			return errors.New("task title must not be empty")
-		}
-		t.Title = *title
-	}
-
-	if description != nil {
-		t.Description = *description
-	}
-
-	if status != nil {
-		if err := validateStatus(*status); err != nil {
-			return err
-		}
-		t.Status = *status
-	}
-
-	if priority != nil {
-		if err := validatePriority(*priority); err != nil {
-			return err
-		}
-		t.Priority = *priority
-	}
-
-	// assigneeID は nil かどうかに関わらず設定する
-	// nil が渡された場合は明示的に nil を設定する（担当者を外す）
-	// ただし、これは呼び出し側で「未指定」と「null」を区別できることが前提
-	// 実際には、呼び出し側（usecase層）で「未指定」の場合は nil を渡さないようにする必要がある
-	// ここでは単純に、渡された値をそのまま設定する
-	// 「未指定」の場合は、usecase層で nil を渡さないようにする
-	t.AssigneeID = assigneeID
-
-	t.UpdatedAt = now
-	return nil
-}
-
 func validateStatus(s TaskStatus) error {
 	if _, err := ParseStatus(string(s)); err != nil {
 		return errors.New("invalid task status")
@@ -159,4 +111,8 @@ func validatePriority(p TaskPriority) error {
 		return errors.New("invalid task priority")
 	}
 	return nil
+}
+
+func (t *Task) TouchUpdatedAt() {
+	t.UpdatedAt = time.Now()
 }

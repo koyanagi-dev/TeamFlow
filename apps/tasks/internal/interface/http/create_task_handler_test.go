@@ -749,6 +749,23 @@ func TestPatchTaskHandler_InvalidStatus(t *testing.T) {
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
 
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
 	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
 
 	// 無効な status
@@ -775,6 +792,23 @@ func TestPatchTaskHandler_InvalidPriority(t *testing.T) {
 	createUC := &usecase.CreateTaskUsecase{Repo: repo}
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
 
 	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
 

@@ -255,11 +255,12 @@ func (ns *nullableString) toPtr() *string {
 
 // PatchTaskRequest は PATCH /api/tasks/{id} のリクエストボディ。
 type PatchTaskRequest struct {
-	Title       *string         `json:"title"`
-	Description nullableString  `json:"description"`
-	Status    *string        `json:"status"`
-	Priority  *string        `json:"priority"`
-	AssigneeID OptionalString `json:"assigneeId"`
+	Title       *string        `json:"title"`
+	Description nullableString `json:"description"`
+	Status      *string        `json:"status"`
+	Priority    *string        `json:"priority"`
+	AssigneeID  OptionalString `json:"assigneeId"`
+	DueDate     nullableString `json:"dueDate"`
 }
 
 func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id string) {
@@ -280,38 +281,41 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 
-	var trimmedTitle *string
+	// Title
+	var titlePatch domain.Patch[string]
 	if req.Title != nil {
-		// title が空文字または空白のみの場合は 400
 		trimmed := strings.TrimSpace(*req.Title)
 		if trimmed == "" {
 			writeErrorResponse(w, http.StatusBadRequest, "validation error", "task title must not be empty")
 			return
 		}
-		trimmedTitle = &trimmed
+		titlePatch = domain.Set(trimmed)
 	}
 
-	var status *domain.TaskStatus
+	// Description
+	var descriptionPatch domain.Patch[string]
+	if req.Description.present {
+		if req.Description.isNull {
+			descriptionPatch = domain.Null[string]()
+		} else {
+			descriptionPatch = domain.Set(*req.Description.value)
+		}
+	}
+
+	// Status (Usecase 層で Parse するため、文字列のまま渡す)
+	var statusStr *string
 	if req.Status != nil {
-		parsed, err := domain.ParseStatus(*req.Status)
-		if err != nil {
-			writeErrorResponse(w, http.StatusBadRequest, "invalid status", err.Error())
-			return
-		}
-		status = &parsed
+		statusStr = req.Status
 	}
 
-	var priority *domain.TaskPriority
+	// Priority (Usecase 層で Parse するため、文字列のまま渡す)
+	var priorityStr *string
 	if req.Priority != nil {
-		parsed, err := domain.ParsePriority(*req.Priority)
-		if err != nil {
-			writeErrorResponse(w, http.StatusBadRequest, "invalid priority", err.Error())
-			return
-		}
-		priority = &parsed
+		priorityStr = req.Priority
 	}
 
-	var assigneeID *string
+	// AssigneeID
+	var assigneeIDPatch domain.Patch[string]
 	if req.AssigneeID.IsSet {
 		if req.AssigneeID.Value != nil {
 			// UUID 形式のバリデーション
@@ -320,23 +324,35 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 				writeErrorResponse(w, http.StatusBadRequest, "validation error", "assigneeId must be a valid UUID")
 				return
 			}
-			assigneeID = req.AssigneeID.Value
+			assigneeIDPatch = domain.Set(uuidStr)
 		} else {
-			// null が指定された場合は空文字列へのポインタではなく、nil を設定
-			assigneeID = nil
+			assigneeIDPatch = domain.Null[string]()
 		}
 	}
 
-	description := req.Description.toPtr()
+	// DueDate
+	var dueDatePatch domain.Patch[time.Time]
+	if req.DueDate.present {
+		if req.DueDate.isNull {
+			dueDatePatch = domain.Null[time.Time]()
+		} else {
+			parsed, err := time.Parse(time.RFC3339, *req.DueDate.value)
+			if err != nil {
+				writeErrorResponse(w, http.StatusBadRequest, "validation error", "dueDate must be RFC3339")
+				return
+			}
+			dueDatePatch = domain.Set(parsed)
+		}
+	}
 
 	in := usecase.UpdateTaskInput{
 		ID:          id,
-		Title:       trimmedTitle,
-		Description: description,
-		Status:     status,
-		Priority:   priority,
-		AssigneeID: assigneeID,
-		Now:        h.nowFunc(),
+		Title:       titlePatch,
+		Description: descriptionPatch,
+		StatusStr:   statusStr,
+		PriorityStr: priorityStr,
+		AssigneeID:  assigneeIDPatch,
+		DueDate:     dueDatePatch,
 	}
 
 	t, err := h.updateUC.Execute(r.Context(), in)

@@ -10,16 +10,15 @@ import (
 )
 
 // UpdateTaskInput はタスク更新ユースケースの入力。
-// フィールドは PATCH を想定し、nil の場合は更新しない。
+// HTTP 層から受け取った情報を TaskPatch に変換する。
 type UpdateTaskInput struct {
 	ID          string
-	Title       *string
-	Description *string
-	Status      *domain.TaskStatus
-	AssigneeID  *string
-	Priority    *domain.TaskPriority
-	DueDate     *string
-	Now         time.Time
+	Title       domain.Patch[string]
+	Description domain.Patch[string]
+	StatusStr   *string
+	PriorityStr *string
+	AssigneeID  domain.Patch[string]
+	DueDate     domain.Patch[time.Time]
 }
 
 // UpdateTaskUsecase はタスク更新ユースケースを表す。
@@ -37,19 +36,40 @@ func (uc *UpdateTaskUsecase) Execute(ctx context.Context, in UpdateTaskInput) (*
 		return nil, err
 	}
 
-	var dueDate *time.Time
-	if in.DueDate != nil {
-		if *in.DueDate == "" {
-			return nil, fmt.Errorf("%w: dueDate must be RFC3339 when provided", ErrInvalidInput)
-		}
-		parsed, err := time.Parse(time.RFC3339, *in.DueDate)
+	// TaskPatch を組み立てる
+	patch := domain.TaskPatch{}
+
+	// Title
+	patch.Title = in.Title
+
+	// Description
+	patch.Description = in.Description
+
+	// Status (Usecase 層で Parse)
+	if in.StatusStr != nil {
+		parsed, err := domain.ParseStatus(*in.StatusStr)
 		if err != nil {
-			return nil, fmt.Errorf("%w: dueDate must be RFC3339: %v", ErrInvalidInput, err)
+			return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 		}
-		dueDate = &parsed
+		patch.Status = domain.Set(parsed)
 	}
 
-	if err := existing.Update(in.Title, in.Description, in.Status, in.Priority, in.AssigneeID, dueDate, in.Now); err != nil {
+	// Priority (Usecase 層で Parse)
+	if in.PriorityStr != nil {
+		parsed, err := domain.ParsePriority(*in.PriorityStr)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+		}
+		patch.Priority = domain.Set(parsed)
+	}
+
+	// AssigneeID
+	patch.AssigneeID = in.AssigneeID
+
+	// DueDate
+	patch.DueDate = in.DueDate
+
+	if err := existing.ApplyPatch(patch); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 
