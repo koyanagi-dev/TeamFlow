@@ -160,3 +160,7 @@ func validatePriority(p TaskPriority) error {
 	}
 	return nil
 }
+
+func (t *Task) TouchUpdatedAt() {
+	t.UpdatedAt = time.Now()
+}
