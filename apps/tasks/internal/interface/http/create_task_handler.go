@@ -276,7 +276,12 @@ func (h *TaskHandler) handleUpdate(w http.ResponseWriter, r *http.Request, id st
 	}
 
 	// 全部 nil チェック
-	if req.Title == nil && req.Status == nil && req.Priority == nil && !req.Description.present && !req.AssigneeID.IsSet {
+	if req.Title == nil &&
+		req.Status == nil &&
+		req.Priority == nil &&
+		!req.Description.present &&
+		!req.AssigneeID.IsSet &&
+		!req.DueDate.present {
 		writeErrorResponse(w, http.StatusBadRequest, "validation error", "at least one field must be provided")
 		return
 	}

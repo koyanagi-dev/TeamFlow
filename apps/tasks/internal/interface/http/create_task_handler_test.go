@@ -967,7 +967,6 @@ func TestPatchTaskHandler_UpdateDescriptionToNull(t *testing.T) {
 	}
 }
 
-
 func TestPatchTaskHandler_UpdateAssigneeID(t *testing.T) {
 	repo := taskinfra.NewMemoryTaskRepository()
 	createUC := &usecase.CreateTaskUsecase{Repo: repo}
@@ -1034,7 +1033,6 @@ func TestPatchTaskHandler_UpdateAssigneeID(t *testing.T) {
 		t.Errorf("expected assigneeId '%s', got '%s'", validUUID, *respBody.AssigneeID)
 	}
 }
-
 
 func TestPatchTaskHandler_UpdateAssigneeIDNull(t *testing.T) {
 	repo := taskinfra.NewMemoryTaskRepository()
@@ -1114,7 +1112,6 @@ func TestPatchTaskHandler_UpdateAssigneeIDNull(t *testing.T) {
 	}
 }
 
-
 func TestPatchTaskHandler_InvalidAssigneeID(t *testing.T) {
 	repo := taskinfra.NewMemoryTaskRepository()
 	createUC := &usecase.CreateTaskUsecase{Repo: repo}
@@ -1168,5 +1165,152 @@ func TestPatchTaskHandler_InvalidAssigneeID(t *testing.T) {
 
 	if errorResp.Error != "validation error" {
 		t.Errorf("expected error 'validation error', got '%s'", errorResp.Error)
+	}
+}
+
+func TestPatchTaskHandler_UpdateDueDate(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	updateTime := now.Add(1 * time.Hour)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+
+	// dueDate のみを更新
+	body := map[string]interface{}{
+		"dueDate": "2025-01-01T00:00:00Z",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errorResp struct {
+			Error  string `json:"error"`
+			Detail string `json:"detail"`
+		}
+		if err := json.NewDecoder(res.Body).Decode(&errorResp); err == nil {
+			t.Fatalf("expected status 200, got %d: error=%s, detail=%s", res.StatusCode, errorResp.Error, errorResp.Detail)
+		} else {
+			t.Fatalf("expected status 200, got %d", res.StatusCode)
+		}
+	}
+
+	var respBody struct {
+		DueDate *time.Time `json:"dueDate"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	expectedDueDate := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	if respBody.DueDate == nil {
+		t.Errorf("expected dueDate to be set, got nil")
+	} else if !respBody.DueDate.Equal(expectedDueDate) {
+		t.Errorf("expected dueDate '%s', got '%s'", expectedDueDate.Format(time.RFC3339), respBody.DueDate.Format(time.RFC3339))
+	}
+}
+
+func TestPatchTaskHandler_UpdateDueDateToNull(t *testing.T) {
+	repo := taskinfra.NewMemoryTaskRepository()
+	createUC := &usecase.CreateTaskUsecase{Repo: repo}
+	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
+	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
+
+	now := fixedNow()
+	ctx := context.Background()
+
+	// 事前にタスク作成
+	_, err := createUC.Execute(ctx, usecase.CreateTaskInput{
+		ID:          "task-1",
+		ProjectID:   "proj-1",
+		Title:       "initial title",
+		Description: "desc",
+		Status:      domain.StatusTodo,
+		Priority:    domain.PriorityMedium,
+		Now:         now,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	// まず dueDate を設定
+	updateTime1 := now.Add(1 * time.Hour)
+	handler1 := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime1 })
+	body1 := map[string]interface{}{
+		"dueDate": "2025-01-01T00:00:00Z",
+	}
+	b1, _ := json.Marshal(body1)
+	req1 := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b1))
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	handler1.ServeHTTP(w1, req1)
+	if w1.Result().StatusCode != http.StatusOK {
+		t.Fatalf("failed to set initial dueDate")
+	}
+
+	// 次に dueDate を null で外す
+	updateTime2 := now.Add(2 * time.Hour)
+	handler2 := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime2 })
+	body2 := map[string]interface{}{
+		"dueDate": nil,
+	}
+	b2, _ := json.Marshal(body2)
+
+	req2 := httptest.NewRequest(http.MethodPatch, "/tasks/task-1", bytes.NewReader(b2))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+
+	handler2.ServeHTTP(w2, req2)
+
+	res := w2.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var errorResp struct {
+			Error  string `json:"error"`
+			Detail string `json:"detail"`
+		}
+		if err := json.NewDecoder(res.Body).Decode(&errorResp); err == nil {
+			t.Fatalf("expected status 200, got %d: error=%s, detail=%s", res.StatusCode, errorResp.Error, errorResp.Detail)
+		} else {
+			t.Fatalf("expected status 200, got %d", res.StatusCode)
+		}
+	}
+
+	var respBody struct {
+		DueDate *time.Time `json:"dueDate"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&respBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if respBody.DueDate != nil {
+		t.Errorf("expected dueDate to be nil, got '%s'", respBody.DueDate.Format(time.RFC3339))
 	}
 }
