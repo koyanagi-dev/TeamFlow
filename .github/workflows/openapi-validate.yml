@@ -1,0 +1,41 @@
+name: OpenAPI Validate
+
+on:
+  pull_request:
+    paths:
+      - 'docs/api/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Makefile'
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/api/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Makefile'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install
+      
+      - name: Validate OpenAPI specification
+        run: make openapi-validate
+
