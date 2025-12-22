@@ -10,6 +10,7 @@
     "test": "turbo test"
   },
   "devDependencies": {
+    "@redocly/cli": "^1.15.2",
     "turbo": "^2.6.3"
   }
 }

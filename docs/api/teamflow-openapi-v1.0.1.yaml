@@ -947,7 +947,7 @@ components:
       properties:
         error:
           type: string
-          description: エラー種別コード（例: VALIDATION_ERROR）
+          description: "エラー種別コード（例: VALIDATION_ERROR）"
         message:
           type: string
           description: 人間向けメッセージ
