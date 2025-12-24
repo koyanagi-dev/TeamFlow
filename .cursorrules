@@ -1,0 +1,114 @@
+# .cursorrules — TeamFlow (Cursor Instructions)
+# Role: Cursor is the IMPLEMENTATION ENGINEER.
+# Human is the final decision maker. ChatGPT is PM/TechLead/Architect.
+
+## 0. Non-negotiables (must)
+- Follow GitHub Flow strictly.
+  - Always work on a feature branch from master.
+  - Keep master always deployable.
+  - Small PRs. CI must be green.
+- Do not "guess" specs. If unclear, ask ChatGPT.
+- No vague instructions in your output. Provide concrete edits: exact file paths, exact code blocks, exact replacements.
+
+## 1. GitHub Flow (always run in this order)
+When starting a task, print these commands first (copy-paste ready):
+1) git switch master
+2) git pull origin master
+3) git switch -c <feature-branch>
+
+Before pushing:
+- run tests and linters for the touched area
+- ensure OpenAPI validate/diff are green when spec changed
+
+When finishing:
+- git status
+- git add -A
+- git commit -m "<message>"
+- git push -u origin <feature-branch>
+
+## 2. Architecture & code style (Go services)
+- Services use Clean Architecture layers:
+  - domain: entities/value objects/query objects (business rules)
+  - usecase: application services (orchestrate domain + repositories)
+  - interface/http: handlers, request parsing/validation, response mapping
+  - infrastructure: repository implementations (SQL, memory, etc.)
+- Domain must not depend on infrastructure.
+- Prefer Query Object in domain to represent search/filter/sort conditions.
+  - The Query Object is responsible for normalization defaults.
+  - Example: if no status filter => treat as "all statuses".
+- Repository interface should hide DB concerns:
+  - taskRepository.FindByCondition(ctx, condition) (name can vary)
+  - Convert condition -> SQL in infrastructure.
+
+## 3. Testing rules (Go + TS)
+- Follow project test strategy priorities:
+  - Go domain/usecase tests are top priority.
+  - TS (Auth/BFF) tests next.
+  - Frontend tests later (component/E2E), but keep code testable.
+- Use table-driven tests for Go.
+- Infrastructure should be tested with memory repo where possible.
+
+## 4. OpenAPI is the contract (Single Source of Truth)
+- If behavior changes, update OpenAPI first (or in the same PR).
+- CI will run:
+  - make openapi-validate
+  - make openapi-diff (breaking changes should fail)
+- When proposing OpenAPI changes:
+  - Provide exact YAML patches (no vague "around here").
+  - If a change is breaking, call it out explicitly and propose a non-breaking alternative if possible.
+
+## 5. Feature Guidance: Tasks Search / Filter / Sort (Phase D)
+### 5.1 Endpoint (existing)
+- GET /api/projects/{projectId}/tasks currently exists and returns:
+  - { "tasks": Task[] }
+- Extend via query params (non-breaking approach preferred):
+  - Add new query params without removing existing ones.
+
+### 5.2 Filters (initial set)
+- status: one of todo / in_progress / done (single or multi-value depending on final spec)
+- assigneeId: uuid
+- priority: low / medium / high
+- dueDateFrom, dueDateTo: date (YYYY-MM-DD)
+  - dueDate is date-only, not date-time.
+
+### 5.3 Sorting (support multi-sort, scalable)
+- Use a single query parameter:
+  - sort=-priority,createdAt
+  - "-" prefix means DESC, otherwise ASC
+- Supported sort keys (initial):
+  - createdAt, dueDate, priority, sortOrder
+- dueDate sorting with null:
+  - For ASC (earliest first): nulls MUST be last.
+  - For DESC (latest first): nulls MUST be first (unless spec says otherwise).
+
+### 5.4 Priority Sorting Logic (IMPORTANT)
+- Priority is a string: high / medium / low.
+- MUST be sorted by business order: high > medium > low (NOT alphabetical).
+- In SQL repositories, implement with CASE (or numeric mapping) so ordering is correct.
+  - Example: CASE priority WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 END
+- When implementing in TS (BFF), ensure the same business logic is used if sorting or filtering happens in memory.
+
+### 5.5 Performance safety (MVP constraints)
+- Even if paging is deferred, avoid unbounded reads by default.
+- Use a default limit (e.g., 200) unless product explicitly requires full fetch.
+- Response shape should be extensible:
+  - Keep existing "tasks" array for compatibility.
+  - Add optional fields like totalCount and nextCursor without breaking.
+
+## 6. TypeScript (Front/BFF/Auth) rules (must consider)
+- This repo may include TS for:
+  - Next.js frontend
+  - BFF (API gateway) or Auth service
+- TS rules:
+  - Prefer strict typing (no implicit any).
+  - Use Zod or equivalent runtime validation where it prevents boundary bugs (BFF).
+  - Keep API types aligned with OpenAPI (type generation if available).
+  - Tests: Jest or Vitest; write focused unit tests for critical logic (auth, validation, mapping).
+- When changing OpenAPI:
+  - Check whether TS types/clients need regeneration or updates.
+
+## 7. PR hygiene
+- Each PR should do ONE thing:
+  - Spec-only PR vs implementation PR should be separated when scope is large.
+- Keep commit messages descriptive.
+- Include "How to test" steps in PR description.
