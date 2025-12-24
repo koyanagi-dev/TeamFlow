@@ -1069,7 +1069,7 @@ components:
           nullable: true
         status:
           type: string
-          enum: [todo, in_progress, done]
+          enum: [todo, doing, in_progress, done]
         priority:
           type: string
           enum: [low, medium, high]
@@ -1108,7 +1108,7 @@ components:
           type: string
         status:
           type: string
-          enum: [todo, in_progress, done]
+          enum: [todo, doing, in_progress, done]
           default: todo
         priority:
           type: string
@@ -1136,7 +1136,7 @@ components:
           description: タスクの説明。
         status:
           type: string
-          enum: [todo, in_progress, done]
+          enum: [todo, doing, in_progress, done]
           description: タスクのステータス。正式な値は todo / in_progress / done。"doing" が指定された場合は互換のため "in_progress" に正規化される。
         priority:
           type: string
@@ -1158,7 +1158,7 @@ components:
       properties:
         status:
           type: string
-          enum: [todo, in_progress, done]
+          enum: [todo, doing, in_progress, done]
         sortOrder:
           type: integer
           description: 新しいカンバン内の並び順
