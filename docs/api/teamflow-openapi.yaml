@@ -1069,7 +1069,7 @@ components:
           nullable: true
         status:
           type: string
-          enum: [todo, in_progress, done]
+          enum: [todo, doing, in_progress, done]
         priority:
           type: string
           enum: [low, medium, high]
@@ -1108,7 +1108,7 @@ components:
           type: string
         status:
           type: string
-          enum: [todo, in_progress, done]
+          enum: [todo, doing, in_progress, done]
           default: todo
         priority:
           type: string
@@ -1124,33 +1124,41 @@ components:
 
     TaskUpdateRequest:
       type: object
+      minProperties: 1
+      description: PATCH /api/tasks/{taskId} のリクエストボディ。すべてのフィールドは任意（optional）。更新したいフィールドのみを指定する。少なくとも1つのフィールドは必須。
       properties:
         title:
           type: string
+          description: タスクのタイトル。空文字または空白のみの場合は400エラー。
         description:
           type: string
           nullable: true
+          description: タスクの説明。
         status:
           type: string
-          enum: [todo, in_progress, done]
+          enum: [todo, doing, in_progress, done]
+          description: タスクのステータス。正式な値は todo / in_progress / done。"doing" が指定された場合は互換のため "in_progress" に正規化される。
         priority:
           type: string
           enum: [low, medium, high]
+          description: タスクの優先度。
         assigneeId:
           type: string
           format: uuid
           nullable: true
+          description: 担当者のユーザーID。
         dueDate:
           type: string
           format: date-time
           nullable: true
+          description: 期限日時（RFC3339形式）。
 
     TaskMoveRequest:
       type: object
       properties:
         status:
           type: string
-          enum: [todo, doing, done]
+          enum: [todo, doing, in_progress, done]
         sortOrder:
           type: integer
           description: 新しいカンバン内の並び順
