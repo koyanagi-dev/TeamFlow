@@ -1,6 +1,6 @@
 .PHONY: openapi-validate openapi-diff go-test
 
-OPENAPI_FILE := docs/api/teamflow-openapi-v1.0.1.yaml
+OPENAPI_FILE := docs/api/teamflow-openapi.yaml
 
 openapi-validate:
 	@echo "Validating OpenAPI specification..."
