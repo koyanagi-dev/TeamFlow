@@ -495,17 +495,78 @@ paths:
           schema:
             type: string
             format: uuid
-        - in: query
-          name: status
+        # --- Filters ---
+        - name: status
+          in: query
+          required: false
+          description: >
+            ステータスでフィルタ。カンマ区切りで複数指定可能（例: status=todo,in_progress）。
+            推奨値: todo / in_progress / done。
+            互換のため doing も受け付ける（doing は in_progress に正規化される想定）。
           schema:
             type: string
-            description: フィルタ用（todo/in_progress/done）
-        - in: query
-          name: assigneeId
+          style: form
+          explode: false
+        - name: assigneeId
+          in: query
+          required: false
+          description: 担当者のユーザーIDで絞り込み（UUID）。
           schema:
             type: string
             format: uuid
-            description: 担当者で絞り込み
+        - name: priority
+          in: query
+          required: false
+          description: >
+            優先度でフィルタ。カンマ区切りで複数指定可能（例: priority=high,medium）。
+            推奨値: low / medium / high。
+          schema:
+            type: string
+          style: form
+          explode: false
+        - name: dueDateFrom
+          in: query
+          required: false
+          description: 期限の開始日（YYYY-MM-DD形式）。この日以降のタスクを取得
+          schema:
+            type: string
+            format: date
+        - name: dueDateTo
+          in: query
+          required: false
+          description: 期限の終了日（YYYY-MM-DD形式）。この日以前のタスクを取得
+          schema:
+            type: string
+            format: date
+        - name: q
+          in: query
+          required: false
+          description: 検索クエリ（MVPはタイトルの部分一致を想定）
+          schema:
+            type: string
+            minLength: 1
+        # --- Sorting ---
+        - name: sort
+          in: query
+          required: false
+          description: >
+            ソート順を指定。形式: sort=-priority,createdAt（- はDESC、無印はASC）。
+            使用可能キー: sortOrder, createdAt, updatedAt, dueDate, priority。
+            dueDate の null 値は最後に寄せる（ASC時は最後、DESC時は最初）。
+            priority は辞書順ではなく業務順（high > medium > low）でソートされる。
+          schema:
+            type: string
+            example: "-priority,createdAt"
+        # --- Safety / Limit ---
+        - name: limit
+          in: query
+          required: false
+          description: 取得件数の上限。未指定時は200、最大200件まで取得可能
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 200
       responses:
         '200':
           description: タスク一覧

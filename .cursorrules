@@ -112,3 +112,28 @@ When finishing:
   - Spec-only PR vs implementation PR should be separated when scope is large.
 - Keep commit messages descriptive.
 - Include "How to test" steps in PR description.
+
+## 8. OpenAPI Design Rules
+### OpenAPI Query Parameter Rules (Important)
+
+- If a query parameter allows multiple values (e.g. comma-separated values),
+  DO NOT change its schema type from `string` to `array`.
+  Changing the parameter type is a BREAKING CHANGE.
+
+- For backward compatibility:
+  - Keep the schema as `type: string`
+  - Describe multiple values in the description
+    (e.g. "comma-separated values are supported")
+
+- Never change an existing query parameter's `type` or `format`
+  in OpenAPI without explicit confirmation.
+  If extension is needed, it must be backward-compatible.
+
+- When writing examples or descriptions that include `:` (colon),
+  ALWAYS use YAML block style (`description: >`)
+  to avoid YAML parsing errors.
+
+- Multiple values in query parameters MUST be expressed as:
+  - type: string
+  - description explains comma-separated usage
+  NOT as `type: array`, unless the parameter is newly introduced.
