@@ -364,25 +364,3 @@ func TestNewTaskQuery_DueDateRange(t *testing.T) {
 	}
 }
 
-func TestPrioritySortValue(t *testing.T) {
-	tests := []struct {
-		name     string
-		priority TaskPriority
-		want     int
-	}{
-		{"high", PriorityHigh, 3},
-		{"medium", PriorityMedium, 2},
-		{"low", PriorityLow, 1},
-		{"invalid", TaskPriority("invalid"), 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := PrioritySortValue(tt.priority)
-			if got != tt.want {
-				t.Errorf("PrioritySortValue(%v) = %d, want %d", tt.priority, got, tt.want)
-			}
-		})
-	}
-}
-

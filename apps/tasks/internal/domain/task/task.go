@@ -49,6 +49,24 @@ func ParsePriority(p string) (TaskPriority, error) {
 	}
 }
 
+// CompareTo は優先度を比較する（high > medium > low）。
+// 戻り値: <0 (p < other), 0 (p == other), >0 (p > other)
+func (p TaskPriority) CompareTo(other TaskPriority) int {
+	value := func(pr TaskPriority) int {
+		switch pr {
+		case PriorityHigh:
+			return 3
+		case PriorityMedium:
+			return 2
+		case PriorityLow:
+			return 1
+		default:
+			return 0
+		}
+	}
+	return value(p) - value(other)
+}
+
 // Task は TeamFlow におけるタスクのドメインモデル。
 type Task struct {
 	ID          string
