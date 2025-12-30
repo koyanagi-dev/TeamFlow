@@ -12,7 +12,8 @@ type TaskRepository interface {
 	Save(ctx context.Context, t *domain.Task) error
 	Update(ctx context.Context, t *domain.Task) error
 	FindByID(ctx context.Context, id string) (*domain.Task, error)
-	ListByProject(ctx context.Context, projectID string) ([]*domain.Task, error)
+	ListByProject(ctx context.Context, projectID string) ([]*domain.Task, error) // 後方互換性のため残す
+	FindByProjectID(ctx context.Context, projectID string, query *domain.TaskQuery) ([]*domain.Task, error)
 }
 
 // CreateTaskInput はタスク作成ユースケースの入力。

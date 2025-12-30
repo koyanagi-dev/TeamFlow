@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,6 +83,21 @@ type taskResponse struct {
 }
 
 func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// /projects/{projectId}/tasks の処理
+	if strings.HasPrefix(r.URL.Path, "/projects/") && strings.HasSuffix(r.URL.Path, "/tasks") {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		// /projects/{projectId}/tasks から projectId を抽出
+		path := strings.TrimPrefix(r.URL.Path, "/projects/")
+		path = strings.TrimSuffix(path, "/tasks")
+		projectID := path
+		h.handleListByProjectWithQuery(w, r, projectID)
+		return
+	}
+
+	// /tasks/{id} の処理
 	if strings.HasPrefix(r.URL.Path, "/tasks/") {
 		if r.Method != http.MethodPatch {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -96,6 +112,7 @@ func (h *TaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// /tasks の処理（既存API、後方互換性のため残す）
 	if r.URL.Path != "/tasks" {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -207,6 +224,116 @@ func (h *TaskHandler) handleListByProject(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(responses)
+}
+
+// handleListByProjectWithQuery は /projects/{projectId}/tasks を処理する（Query Objectを使用）。
+func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *http.Request, projectID string) {
+	if h.listUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if projectID == "" {
+		writeErrorResponse(w, http.StatusBadRequest, "validation error", "projectId is required")
+		return
+	}
+
+	// Query Object を構築
+	opts := []domain.TaskQueryOption{}
+
+	// status フィルタ（カンマ区切り）
+	if statusStr := r.URL.Query().Get("status"); statusStr != "" {
+		opts = append(opts, domain.WithStatusFilter(statusStr))
+	}
+
+	// priority フィルタ（カンマ区切り）
+	if priorityStr := r.URL.Query().Get("priority"); priorityStr != "" {
+		opts = append(opts, domain.WithPriorityFilter(priorityStr))
+	}
+
+	// assigneeId フィルタ
+	if assigneeID := r.URL.Query().Get("assigneeId"); assigneeID != "" {
+		if !isValidUUID(assigneeID) {
+			writeErrorResponse(w, http.StatusBadRequest, "validation error", "assigneeId must be a valid UUID")
+			return
+		}
+		opts = append(opts, domain.WithAssigneeIDFilter(assigneeID))
+	}
+
+	// dueDateFrom / dueDateTo フィルタ
+	dueDateFrom := r.URL.Query().Get("dueDateFrom")
+	dueDateTo := r.URL.Query().Get("dueDateTo")
+	if dueDateFrom != "" || dueDateTo != "" {
+		opts = append(opts, domain.WithDueDateRangeFilter(dueDateFrom, dueDateTo))
+	}
+
+	// q フィルタ（タイトル検索）
+	if queryStr := r.URL.Query().Get("q"); queryStr != "" {
+		opts = append(opts, domain.WithQueryFilter(queryStr))
+	}
+
+	// sort
+	if sortStr := r.URL.Query().Get("sort"); sortStr != "" {
+		opts = append(opts, domain.WithSort(sortStr))
+	}
+
+	// limit
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil {
+			writeErrorResponse(w, http.StatusBadRequest, "validation error", "limit must be an integer")
+			return
+		}
+		opts = append(opts, domain.WithLimit(limit))
+	}
+
+	// Query Object を作成
+	query, err := domain.NewTaskQuery(opts...)
+	if err != nil {
+		writeErrorResponse(w, http.StatusBadRequest, "validation error", err.Error())
+		return
+	}
+
+	// Query Object のバリデーション
+	if err := query.Validate(); err != nil {
+		writeErrorResponse(w, http.StatusBadRequest, "validation error", err.Error())
+		return
+	}
+
+	// Usecase を実行
+	tasks, err := h.listUC.ExecuteWithQuery(r.Context(), usecase.ListTasksByProjectWithQueryInput{
+		ProjectID: projectID,
+		Query:     query,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// レスポンス形式: { "tasks": [...] } (OpenAPI仕様に準拠)
+	type tasksResponse struct {
+		Tasks []taskResponse `json:"tasks"`
+	}
+
+	responses := make([]taskResponse, 0, len(tasks))
+	for _, t := range tasks {
+		responses = append(responses, taskResponse{
+			ID:          t.ID,
+			ProjectID:   t.ProjectID,
+			Title:       t.Title,
+			Description: t.Description,
+			Status:      string(t.Status),
+			Priority:    string(t.Priority),
+			AssigneeID:  t.AssigneeID,
+			DueDate:     t.DueDate,
+			CreatedAt:   t.CreatedAt,
+			UpdatedAt:   t.UpdatedAt,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(tasksResponse{Tasks: responses})
 }
 
 type updateTaskRequest struct {
