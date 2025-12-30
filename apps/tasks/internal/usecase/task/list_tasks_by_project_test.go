@@ -3,6 +3,7 @@ package task_test
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -25,6 +26,17 @@ func (r *listRepo) FindByID(_ context.Context, id string) (*domain.Task, error) 
 	return nil, errors.New("not found")
 }
 func (r *listRepo) ListByProject(context.Context, string) ([]*domain.Task, error) {
+	// memory repositoryと同様にcreatedAt ASCでソート
+	result := make([]*domain.Task, len(r.out))
+	copy(result, r.out)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.Before(result[j].CreatedAt)
+	})
+	return result, nil
+}
+
+func (r *listRepo) FindByProjectID(context.Context, string, *domain.TaskQuery) ([]*domain.Task, error) {
+	// Query Objectは使用せず、ListByProjectと同じ挙動（テストの簡素化のため）
 	return r.out, nil
 }
 

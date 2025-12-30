@@ -60,7 +60,7 @@ func (r *MemoryTaskRepository) FindByID(_ context.Context, id string) (*domain.T
 	return task, nil
 }
 
-// ListByProject は指定された projectID のタスク一覧を返す。
+// ListByProject は指定された projectID のタスク一覧を返す（後方互換性のため残す）。
 func (r *MemoryTaskRepository) ListByProject(_ context.Context, projectID string) ([]*domain.Task, error) {
 	if r.tasks == nil {
 		return []*domain.Task{}, nil
@@ -77,4 +77,30 @@ func (r *MemoryTaskRepository) ListByProject(_ context.Context, projectID string
 		return out[i].CreatedAt.Before(out[j].CreatedAt)
 	})
 	return out, nil
+}
+
+// FindByProjectID は指定された projectID と Query Object に基づいてタスクを取得する。
+func (r *MemoryTaskRepository) FindByProjectID(_ context.Context, projectID string, query *domain.TaskQuery) ([]*domain.Task, error) {
+	if r.tasks == nil {
+		return []*domain.Task{}, nil
+	}
+
+	// まず projectID でフィルタ
+	candidates := make([]*domain.Task, 0)
+	for _, t := range r.tasks {
+		if t.ProjectID == projectID {
+			candidates = append(candidates, t)
+		}
+	}
+
+	// Query Object のフィルタを適用
+	filtered := query.FilterTasks(candidates)
+
+	// Query Object のソートを適用
+	query.SortTasks(filtered)
+
+	// Query Object のリミットを適用
+	result := query.ApplyLimit(filtered)
+
+	return result, nil
 }

@@ -44,6 +44,11 @@ func (r *fakeTaskRepo) ListByProject(_ context.Context, projectID string) ([]*do
 	return r.listOut, nil
 }
 
+func (r *fakeTaskRepo) FindByProjectID(_ context.Context, projectID string, query *domain.TaskQuery) ([]*domain.Task, error) {
+	// Query Objectは使用せず、ListByProjectと同じ挙動（テストの簡素化のため）
+	return r.listOut, nil
+}
+
 func TestNewTask_Success(t *testing.T) {
 	now := time.Now()
 
