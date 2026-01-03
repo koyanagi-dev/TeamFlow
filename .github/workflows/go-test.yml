@@ -1,0 +1,43 @@
+name: Go Test
+
+on:
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'Makefile'
+      - '.github/workflows/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - 'go.mod'
+      - 'go.sum'
+  push:
+    branches: [ master ]
+    paths:
+      - 'apps/**'
+      - 'Makefile'
+      - '.github/workflows/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  go-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: true
+
+      - name: Install sqlc
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: sqlc generate + go test
+        run: make go-test
+

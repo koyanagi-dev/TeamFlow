@@ -1,4 +1,4 @@
-.PHONY: openapi-validate openapi-diff go-test
+.PHONY: openapi-validate openapi-diff go-test sqlc-generate
 
 OPENAPI_FILE := docs/api/teamflow-openapi.yaml
 
@@ -40,6 +40,9 @@ openapi-diff:
 	fi; \
 	echo "✓ No breaking changes detected"
 
-go-test:
+sqlc-generate:
+	cd apps/tasks && sqlc generate
+
+go-test: sqlc-generate
 	cd apps/projects && go test ./...
 	cd apps/tasks && go test ./...
