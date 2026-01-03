@@ -1,50 +1,43 @@
-{\rtf1\ansi\ansicpg932\cocoartf2709
-\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
-{\colortbl;\red255\green255\blue255;}
-{\*\expandedcolortbl;;}
-\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
-\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+name: Go Test
 
-\f0\fs24 \cf0 name: Go Test\
-\
-on:\
-  pull_request:\
-    paths:\
-      - 'apps/**'\
-      - 'Makefile'\
-      - '.github/workflows/**'\
-      - 'go.work'\
-      - 'go.work.sum'\
-      - 'go.mod'\
-      - 'go.sum'\
-  push:\
-    branches: [ master ]\
-    paths:\
-      - 'apps/**'\
-      - 'Makefile'\
-      - '.github/workflows/**'\
-      - 'go.work'\
-      - 'go.work.sum'\
-      - 'go.mod'\
-      - 'go.sum'\
-\
-jobs:\
-  go-test:\
-    runs-on: ubuntu-latest\
-    steps:\
-      - uses: actions/checkout@v4\
-\
-      - name: Setup Go\
-        uses: actions/setup-go@v5\
-        with:\
-          go-version: '1.25.x'\
-          cache: true\
-\
-      - name: Install sqlc\
-        run: |\
-          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest\
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH\
-\
-      - name: sqlc generate + go test\
-        run: make go-test\
-}
+on:
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'Makefile'
+      - '.github/workflows/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - 'go.mod'
+      - 'go.sum'
+  push:
+    branches: [ master ]
+    paths:
+      - 'apps/**'
+      - 'Makefile'
+      - '.github/workflows/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  go-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: true
+
+      - name: Install sqlc
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: sqlc generate + go test
+        run: make go-test
+
