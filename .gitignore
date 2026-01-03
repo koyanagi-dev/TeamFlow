@@ -8,3 +8,5 @@ build
 .env.local
 .DS_Store
 diff/
+# sqlc generated (do not commit)
+apps/tasks/internal/infrastructure/task/sqlc/
