@@ -13,26 +13,81 @@ import (
 	domain "teamflow-tasks/internal/domain/task"
 )
 
-// setupTestDB はテスト用のPostgreSQL接続をセットアップする。
-// 環境変数から接続文字列を取得するか、デフォルト値を使用する。
-// テスト環境で実際のDBを使用する場合は、この関数を実装する。
+// testPool is initialized in integration_test.go (TestMain).
+// We keep it in this package scope so integration tests can share a single DB pool.
+var testPool *pgxpool.Pool
+
+// setupTestDB returns the integration-test pool.
+// It fails fast if TestMain didn't initialize the pool.
 func setupTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	// TODO: 実際のDB接続を設定する
-	// 例: DATABASE_URL環境変数から取得、またはtestcontainersを使用
-	t.Skip("database connection not configured for tests")
-	return nil
+	if testPool == nil {
+		t.Fatalf("testPool is nil: ensure TestMain initialized it (go test -tags=integration ./... with DB_TEST_DSN)")
+	}
+	return testPool
+}
+
+func resetTasksTable(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+	_, err := db.Exec(ctx, "TRUNCATE TABLE tasks")
+	if err != nil {
+		t.Fatalf("failed to truncate tasks: %v", err)
+	}
+}
+
+type seedTask struct {
+	ID         string
+	ProjectID  string
+	Title      string
+	Desc       *string
+	Status     string
+	Priority   string
+	AssigneeID *string
+	DueDate    *time.Time // DATE in DB: pass time at midnight; nil for NULL
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+func insertTasks(t *testing.T, db *pgxpool.Pool, tasks []seedTask) {
+	t.Helper()
+	ctx := context.Background()
+
+	const q = `
+		INSERT INTO tasks (
+			id, project_id, title, description, status, priority, assignee_id, due_date, created_at, updated_at
+		) VALUES (
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10
+		)
+	`
+	for _, tt := range tasks {
+		_, err := db.Exec(ctx, q,
+			tt.ID, tt.ProjectID, tt.Title, tt.Desc, tt.Status, tt.Priority, tt.AssigneeID, tt.DueDate, tt.CreatedAt, tt.UpdatedAt,
+		)
+		if err != nil {
+			t.Fatalf("failed to insert seed task id=%s: %v", tt.ID, err)
+		}
+	}
+}
+
+// helper to build a DATE (no time precision required; we care about NULL ordering / filtering)
+func dateYMD(y int, m time.Month, d int) time.Time {
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
 // TestSQLTaskRepository_FindByProjectID_SortByPriority はpriorityソートを検証する。
 func TestSQLTaskRepository_FindByProjectID_SortByPriority(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	ctx := context.Background()
-	now := time.Now()
+	resetTasksTable(t, db)
 
-	// テストデータ作成（実際のDBに保存する必要がある）
-	// TODO: テストデータをDBに保存する処理を追加
+	now := time.Now().UTC()
+
+	insertTasks(t, db, []seedTask{
+		{ID: "task-high", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: now.Add(-3 * time.Hour), UpdatedAt: now.Add(-3 * time.Hour)},
+		{ID: "task-medium", ProjectID: "proj-1", Title: "T2", Status: "todo", Priority: "medium", CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
+		{ID: "task-low", ProjectID: "proj-1", Title: "T3", Status: "todo", Priority: "low", CreatedAt: now.Add(-1 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+	})
 
 	// priority DESC でソート（high > medium > low）
 	query, err := domain.NewTaskQuery(domain.WithSort("-priority"))
@@ -40,7 +95,7 @@ func TestSQLTaskRepository_FindByProjectID_SortByPriority(t *testing.T) {
 		t.Fatalf("failed to create query: %v", err)
 	}
 
-	tasks, err := repo.FindByProjectID(ctx, "proj-1", query)
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -65,73 +120,106 @@ func TestSQLTaskRepository_FindByProjectID_SortByPriority(t *testing.T) {
 func TestSQLTaskRepository_FindByProjectID_SortByDueDate_NullHandling(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	ctx := context.Background()
+	resetTasksTable(t, db)
 
-	// テストデータ作成
-	// - task-1: dueDate = nil
-	// - task-2: dueDate = 2024-01-15
-	// - task-3: dueDate = 2024-01-10
-	// TODO: テストデータをDBに保存する処理を追加
+	now := time.Now().UTC()
+	d1 := dateYMD(2026, 1, 10)
+	d2 := dateYMD(2026, 1, 20)
 
-	// dueDate ASC でソート（NULLS LAST）
-	query, err := domain.NewTaskQuery(domain.WithSort("dueDate"))
+	insertTasks(t, db, []seedTask{
+		{ID: "task-null", ProjectID: "proj-1", Title: "NULL due", Status: "todo", Priority: "medium", DueDate: nil, CreatedAt: now.Add(-3 * time.Hour), UpdatedAt: now.Add(-3 * time.Hour)},
+		{ID: "task-d1", ProjectID: "proj-1", Title: "due 1", Status: "todo", Priority: "medium", DueDate: &d1, CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
+		{ID: "task-d2", ProjectID: "proj-1", Title: "due 2", Status: "todo", Priority: "medium", DueDate: &d2, CreatedAt: now.Add(-1 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+	})
+
+	// dueDate ASC は NULLS LAST が期待（ASC のとき null は last）
+	qAsc, err := domain.NewTaskQuery(domain.WithSort("dueDate"))
 	if err != nil {
 		t.Fatalf("failed to create query: %v", err)
 	}
 
-	tasks, err := repo.FindByProjectID(ctx, "proj-1", query)
+	ascTasks, err := repo.FindByProjectID(context.Background(), "proj-1", qAsc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if len(tasks) != 3 {
-		t.Fatalf("expected 3 tasks, got %d", len(tasks))
+	if len(ascTasks) != 3 {
+		t.Fatalf("expected 3 tasks, got %d", len(ascTasks))
+	}
+	if ascTasks[2].DueDate != nil {
+		t.Errorf("expected NULL dueDate at last index for ASC, got %v", ascTasks[2].DueDate)
 	}
 
-	// ASC: 有効な日付が先、nullが最後
-	// task-2 (2024-01-10) が最初
-	// task-3 (2024-01-15) が次
-	// task-1 (null) が最後
-	// TODO: 実際のデータと比較して検証
-
-	// dueDate DESC でソート（NULLS FIRST）
-	queryDesc, err := domain.NewTaskQuery(domain.WithSort("-dueDate"))
+	// dueDate DESC は NULLS FIRST が期待（DESC のとき null は first）
+	qDesc, err := domain.NewTaskQuery(domain.WithSort("-dueDate"))
 	if err != nil {
 		t.Fatalf("failed to create query: %v", err)
 	}
 
-	tasksDesc, err := repo.FindByProjectID(ctx, "proj-1", queryDesc)
+	descTasks, err := repo.FindByProjectID(context.Background(), "proj-1", qDesc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	// DESC: nullが最初、有効な日付が後
-	// task-1 (null) が最初
-	// task-3 (2024-01-15) が次
-	// task-2 (2024-01-10) が最後
-	// TODO: 実際のデータと比較して検証
+	if len(descTasks) != 3 {
+		t.Fatalf("expected 3 tasks, got %d", len(descTasks))
+	}
+	if descTasks[0].DueDate != nil {
+		t.Errorf("expected NULL dueDate at first index for DESC, got %v", descTasks[0].DueDate)
+	}
 }
 
 // TestSQLTaskRepository_FindByProjectID_SortByCreatedAt はcreatedAtソートを検証する。
 func TestSQLTaskRepository_FindByProjectID_SortByCreatedAt(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	ctx := context.Background()
-	baseTime := time.Now()
+	resetTasksTable(t, db)
 
-	// テストデータ作成
-	// - task-1: createdAt = baseTime - 2h（最も古い）
-	// - task-2: createdAt = baseTime - 1h
-	// - task-3: createdAt = baseTime（最も新しい）
-	// TODO: テストデータをDBに保存する処理を追加
+	base := time.Now().UTC().Add(-10 * time.Minute)
 
-	// createdAt ASC でソート
-	query, err := domain.NewTaskQuery(domain.WithSort("createdAt"))
+	insertTasks(t, db, []seedTask{
+		{ID: "task-1", ProjectID: "proj-1", Title: "old", Status: "todo", Priority: "low", CreatedAt: base.Add(-2 * time.Minute), UpdatedAt: base.Add(-2 * time.Minute)},
+		{ID: "task-2", ProjectID: "proj-1", Title: "mid", Status: "todo", Priority: "low", CreatedAt: base.Add(-1 * time.Minute), UpdatedAt: base.Add(-1 * time.Minute)},
+		{ID: "task-3", ProjectID: "proj-1", Title: "new", Status: "todo", Priority: "low", CreatedAt: base, UpdatedAt: base},
+	})
+
+	qDesc, err := domain.NewTaskQuery(domain.WithSort("-createdAt"))
 	if err != nil {
 		t.Fatalf("failed to create query: %v", err)
 	}
 
-	tasks, err := repo.FindByProjectID(ctx, "proj-1", query)
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", qDesc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(tasks) != 3 {
+		t.Fatalf("expected 3 tasks, got %d", len(tasks))
+	}
+	if tasks[0].ID != "task-3" || tasks[2].ID != "task-1" {
+		t.Errorf("unexpected order: got [%s,%s,%s]", tasks[0].ID, tasks[1].ID, tasks[2].ID)
+	}
+}
+
+// TestSQLTaskRepository_FindByProjectID_MultipleSortKeys は複数ソートキーを検証する。
+func TestSQLTaskRepository_FindByProjectID_MultipleSortKeys(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	base := time.Now().UTC().Add(-1 * time.Hour)
+
+	// 同 priority の中で createdAt で並ぶことを確認する（-priority,createdAt）
+	insertTasks(t, db, []seedTask{
+		{ID: "task-a", ProjectID: "proj-1", Title: "A", Status: "todo", Priority: "high", CreatedAt: base.Add(10 * time.Minute), UpdatedAt: base.Add(10 * time.Minute)},
+		{ID: "task-b", ProjectID: "proj-1", Title: "B", Status: "todo", Priority: "high", CreatedAt: base.Add(0 * time.Minute), UpdatedAt: base.Add(0 * time.Minute)},
+		{ID: "task-c", ProjectID: "proj-1", Title: "C", Status: "todo", Priority: "medium", CreatedAt: base.Add(5 * time.Minute), UpdatedAt: base.Add(5 * time.Minute)},
+	})
+
+	q, err := domain.NewTaskQuery(domain.WithSort("-priority,createdAt"))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", q)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -140,46 +228,11 @@ func TestSQLTaskRepository_FindByProjectID_SortByCreatedAt(t *testing.T) {
 		t.Fatalf("expected 3 tasks, got %d", len(tasks))
 	}
 
-	// 古い順（task-1, task-2, task-3）
-	// TODO: 実際のデータと比較して検証
-	if tasks[0].ID != "task-1" {
-		t.Errorf("expected task-1 at index 0, got %s", tasks[0].ID)
+	// 1) priority high が先、2) high の中では createdAt ASC（古い→新しい）
+	if tasks[0].ID != "task-b" || tasks[1].ID != "task-a" {
+		t.Errorf("unexpected order for high-priority subgroup: got [%s,%s]", tasks[0].ID, tasks[1].ID)
 	}
-	if tasks[1].ID != "task-2" {
-		t.Errorf("expected task-2 at index 1, got %s", tasks[1].ID)
-	}
-	if tasks[2].ID != "task-3" {
-		t.Errorf("expected task-3 at index 2, got %s", tasks[2].ID)
+	if tasks[2].ID != "task-c" {
+		t.Errorf("expected task-c at index 2, got %s", tasks[2].ID)
 	}
 }
-
-// TestSQLTaskRepository_FindByProjectID_MultipleSortKeys は複数キーでのソートを検証する。
-func TestSQLTaskRepository_FindByProjectID_MultipleSortKeys(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewSQLTaskRepository(db)
-	ctx := context.Background()
-
-	// テストデータ作成
-	// - task-1: priority=high, createdAt=old
-	// - task-2: priority=high, createdAt=new
-	// - task-3: priority=low, createdAt=old
-	// TODO: テストデータをDBに保存する処理を追加
-
-	// priority DESC, createdAt ASC でソート
-	query, err := domain.NewTaskQuery(domain.WithSort("-priority,createdAt"))
-	if err != nil {
-		t.Fatalf("failed to create query: %v", err)
-	}
-
-	tasks, err := repo.FindByProjectID(ctx, "proj-1", query)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// priorityが同じ場合はcreatedAtでソートされる
-	// task-1 (high, old) が最初
-	// task-2 (high, new) が次
-	// task-3 (low, old) が最後
-	// TODO: 実際のデータと比較して検証
-}
-

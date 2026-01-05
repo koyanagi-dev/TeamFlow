@@ -1,4 +1,4 @@
-.PHONY: openapi-validate openapi-diff go-test sqlc-generate
+.PHONY: openapi-validate openapi-diff go-test sqlc-generate db-test-up db-test-down test-integration
 
 OPENAPI_FILE := docs/api/teamflow-openapi.yaml
 
@@ -46,3 +46,18 @@ sqlc-generate:
 go-test: sqlc-generate
 	cd apps/projects && go test ./...
 	cd apps/tasks && go test ./...
+
+db-test-up:
+	docker compose -f docker-compose.test.yml up -d --wait
+
+db-test-down:
+	docker compose -f docker-compose.test.yml down -v
+
+test-integration:
+	@set -e; \
+	ROOT_DIR="$$(pwd)"; \
+	trap '$(MAKE) -C "$$ROOT_DIR" db-test-down' EXIT; \
+	$(MAKE) db-test-up; \
+	cd apps/tasks && \
+	DB_TEST_DSN="postgres://teamflow:teamflow@localhost:15432/teamflow_tasks_test?sslmode=disable" \
+	go test -tags=integration ./... -count=1
