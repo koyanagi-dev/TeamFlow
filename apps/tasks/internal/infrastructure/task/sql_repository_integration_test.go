@@ -5,6 +5,7 @@ package taskinfra
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -357,37 +358,17 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Status_Multiple(t *testing.T) 
 	assertNoProjectLeakage(t, tasks, "proj-1")
 }
 
-// TestSQLTaskRepository_FindByProjectID_Filter_Status_InvalidValue は無効な status を検証する。
+// TestSQLTaskRepository_FindByProjectID_Filter_Status_InvalidValue は無効な status が domain.NewTaskQuery でエラーになることを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_Status_InvalidValue(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
-
-	now := time.Now().UTC()
-	user1 := "user-1"
-
-	insertTasks(t, db, []seedTask{
-		{ID: "proj1-todo", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
-		{ID: "proj2-todo", ProjectID: "proj-2", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
-	})
-
-	// 無効な status を直接設定（buildQuery は string(status) を使うので、直接構造体を作成）
-	query := &domain.TaskQuery{
-		Statuses: []domain.TaskStatus{domain.TaskStatus("invalid")},
-		Limit:    10,
+	// 無効な status を domain.NewTaskQuery で作成するとエラーになることを検証
+	_, err := domain.NewTaskQuery(domain.WithStatusFilter("invalid"))
+	if err == nil {
+		t.Fatalf("expected error for invalid status, but got nil")
 	}
-
-	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
-	// SQL エラーは起きない（パラメタとして扱われる）
-	if err != nil {
-		t.Fatalf("unexpected error (should not cause SQL error): %v", err)
+	// エラーメッセージに "invalid status" が含まれることを確認
+	if !strings.Contains(err.Error(), "invalid status") {
+		t.Errorf("expected error message to contain 'invalid status', got: %v", err)
 	}
-
-	// invalid はヒット0（実質無視ではなく値として扱うが、マッチしない）
-	if len(tasks) != 0 {
-		t.Errorf("expected 0 tasks for invalid status, got %d: %v", len(tasks), getTaskIDs(tasks))
-	}
-	assertNoProjectLeakage(t, tasks, "proj-1")
 }
 
 // ============================================================================
@@ -455,36 +436,17 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Priority_Multiple(t *testing.T
 	assertNoProjectLeakage(t, tasks, "proj-1")
 }
 
-// TestSQLTaskRepository_FindByProjectID_Filter_Priority_InvalidValue は無効な priority を検証する。
+// TestSQLTaskRepository_FindByProjectID_Filter_Priority_InvalidValue は無効な priority が domain.NewTaskQuery でエラーになることを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_Priority_InvalidValue(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
-
-	now := time.Now().UTC()
-	user1 := "user-1"
-
-	insertTasks(t, db, []seedTask{
-		{ID: "proj1-high", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
-		{ID: "proj2-high", ProjectID: "proj-2", Title: "beta", Status: "todo", Priority: "high", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
-	})
-
-	// 無効な priority を直接設定
-	query := &domain.TaskQuery{
-		Priorities: []domain.TaskPriority{domain.TaskPriority("pwn")},
-		Limit:      10,
+	// 無効な priority を domain.NewTaskQuery で作成するとエラーになることを検証
+	_, err := domain.NewTaskQuery(domain.WithPriorityFilter("pwn"))
+	if err == nil {
+		t.Fatalf("expected error for invalid priority, but got nil")
 	}
-
-	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
-	if err != nil {
-		t.Fatalf("unexpected error (should not cause SQL error): %v", err)
+	// エラーメッセージに "invalid priority" が含まれることを確認
+	if !strings.Contains(err.Error(), "invalid priority") {
+		t.Errorf("expected error message to contain 'invalid priority', got: %v", err)
 	}
-
-	// pwn はヒット0
-	if len(tasks) != 0 {
-		t.Errorf("expected 0 tasks for invalid priority, got %d: %v", len(tasks), getTaskIDs(tasks))
-	}
-	assertNoProjectLeakage(t, tasks, "proj-1")
 }
 
 // ============================================================================
@@ -799,22 +761,25 @@ func TestSQLTaskRepository_FindByProjectID_Search_SpecialCharacters(t *testing.T
 // ============================================================================
 
 // TestSQLTaskRepository_FindByProjectID_Limit_1 は limit=1 を検証する。
+// sort を付与して決定的にする（createdAt,asc で最古のタスクが返ることを期待）。
 func TestSQLTaskRepository_FindByProjectID_Limit_1(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewSQLTaskRepository(db)
 	resetTasksTable(t, db)
 
-	now := time.Now().UTC()
+	base := time.Now().UTC()
 	user1 := "user-1"
 
+	// createdAt を 3件で差が出るようにする（now, now+1s, now+2s）
 	insertTasks(t, db, []seedTask{
-		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
-		{ID: "proj1-2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
-		{ID: "proj1-3", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
-		{ID: "proj2-1", ProjectID: "proj-2", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: base, UpdatedAt: base},
+		{ID: "proj1-2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: base.Add(1 * time.Second), UpdatedAt: base.Add(1 * time.Second)},
+		{ID: "proj1-3", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: base.Add(2 * time.Second), UpdatedAt: base.Add(2 * time.Second)},
+		{ID: "proj2-1", ProjectID: "proj-2", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: base, UpdatedAt: base},
 	})
 
-	query, err := domain.NewTaskQuery(domain.WithLimit(1))
+	// createdAt,asc でソートして決定的にする
+	query, err := domain.NewTaskQuery(domain.WithSort("createdAt"), domain.WithLimit(1))
 	if err != nil {
 		t.Fatalf("failed to create query: %v", err)
 	}
@@ -828,6 +793,8 @@ func TestSQLTaskRepository_FindByProjectID_Limit_1(t *testing.T) {
 	if len(tasks) != 1 {
 		t.Errorf("expected 1 task, got %d: %v", len(tasks), getTaskIDs(tasks))
 	}
+	// createdAt,asc で最古のタスク（proj1-1）が返ることを期待
+	assertTaskIDs(t, tasks, []string{"proj1-1"})
 	assertNoProjectLeakage(t, tasks, "proj-1")
 }
 
@@ -865,59 +832,29 @@ func TestSQLTaskRepository_FindByProjectID_Limit_ExactCount(t *testing.T) {
 	assertNoProjectLeakage(t, tasks, "proj-1")
 }
 
-// TestSQLTaskRepository_FindByProjectID_Limit_Zero は limit=0 を検証する。
+// TestSQLTaskRepository_FindByProjectID_Limit_Zero は limit=0 が domain.NewTaskQuery で 200 にクランプされることを検証する。
+// 仕様: NewTaskQuery では Limit < 1 の場合は 200 にクランプされる（エラーを返さない）。
 func TestSQLTaskRepository_FindByProjectID_Limit_Zero(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
-
-	now := time.Now().UTC()
-	user1 := "user-1"
-
-	insertTasks(t, db, []seedTask{
-		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
-		{ID: "proj2-1", ProjectID: "proj-2", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
-	})
-
-	// limit=0 は SQL 的に LIMIT 0 なので 0件を期待（現仕様に合わせる）
-	query := &domain.TaskQuery{
-		Limit: 0,
-	}
-
-	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	// limit=0 を domain.NewTaskQuery で作成すると 200 にクランプされることを検証
+	query, err := domain.NewTaskQuery(domain.WithLimit(0))
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("unexpected error (limit=0 should be clamped to 200, not error): %v", err)
 	}
-
-	// LIMIT 0 は 0件を返す
-	if len(tasks) != 0 {
-		t.Errorf("expected 0 tasks for limit=0, got %d: %v", len(tasks), getTaskIDs(tasks))
+	if query.Limit != 200 {
+		t.Errorf("expected limit to be clamped to 200, got %d", query.Limit)
 	}
-	assertNoProjectLeakage(t, tasks, "proj-1")
 }
 
-// TestSQLTaskRepository_FindByProjectID_Limit_Negative_ShouldError は limit=-1 がエラーになることを検証する。
+// TestSQLTaskRepository_FindByProjectID_Limit_Negative_ShouldError は limit=-1 が domain.NewTaskQuery で 200 にクランプされることを検証する。
+// 仕様: NewTaskQuery では Limit < 1 の場合は 200 にクランプされる（エラーを返さない）。
 func TestSQLTaskRepository_FindByProjectID_Limit_Negative_ShouldError(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
-
-	now := time.Now().UTC()
-	user1 := "user-1"
-
-	insertTasks(t, db, []seedTask{
-		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
-	})
-
-	// limit=-1 は Postgres でエラーになるはず
-	query := &domain.TaskQuery{
-		Limit: -1,
+	// limit=-1 を domain.NewTaskQuery で作成すると 200 にクランプされることを検証
+	query, err := domain.NewTaskQuery(domain.WithLimit(-1))
+	if err != nil {
+		t.Fatalf("unexpected error (limit=-1 should be clamped to 200, not error): %v", err)
 	}
-
-	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
-	// err!=nil を期待（異常系）
-	if err == nil {
-		t.Errorf("expected error for limit=-1, but got nil. Tasks returned: %v", getTaskIDs(tasks))
+	if query.Limit != 200 {
+		t.Errorf("expected limit to be clamped to 200, got %d", query.Limit)
 	}
 }
 
@@ -998,52 +935,16 @@ func TestSQLTaskRepository_FindByProjectID_Security_SQLi_InAssigneeID_DoesNotByp
 	}
 }
 
-// TestSQLTaskRepository_FindByProjectID_Security_SortKeyInjection_Ignored は sortKey でのインジェクションが無視されることを検証する。
+// TestSQLTaskRepository_FindByProjectID_Security_SortKeyInjection_Ignored は sortKey でのインジェクションが domain.NewTaskQuery でエラーになることを検証する。
 func TestSQLTaskRepository_FindByProjectID_Security_SortKeyInjection_Ignored(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
-
-	now := time.Now().UTC()
-	user1 := "user-1"
-
-	insertTasks(t, db, []seedTask{
-		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
-		{ID: "proj1-2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
-	})
-
-	// 悪意のある sortKey を直接設定（buildOrderBy のホワイトリストで無視される）
-	query := &domain.TaskQuery{
-		SortOrders: []domain.SortOrder{
-			{Key: "createdAt; DROP TABLE tasks;--", Direction: domain.SortDirectionASC},
-		},
-		Limit: 10,
+	// 悪意のある sortKey を domain.NewTaskQuery で作成するとエラーになることを検証
+	// "createdAt; DROP TABLE tasks;--" は無効なキーとして扱われ、エラーになる
+	_, err := domain.NewTaskQuery(domain.WithSort("createdAt; DROP TABLE tasks;--"))
+	if err == nil {
+		t.Fatalf("expected error for invalid sort key with injection attempt, but got nil")
 	}
-
-	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
-	// クエリが壊れず落ちず、tasks テーブルも健在
-	if err != nil {
-		t.Fatalf("unexpected error (should be handled safely): %v", err)
+	// エラーメッセージに "invalid sort key" が含まれることを確認
+	if !strings.Contains(err.Error(), "invalid sort key") {
+		t.Errorf("expected error message to contain 'invalid sort key', got: %v", err)
 	}
-	// 悪意のある sortKey は無視されるので、デフォルトソートで返る（または空）
-	// ここではエラーが起きないことを確認するだけで十分
-	_ = tasks
-
-	// その後に通常クエリを実行して結果が返ること（テーブルが消えていない証明）
-	normalQuery, err := domain.NewTaskQuery(domain.WithLimit(10))
-	if err != nil {
-		t.Fatalf("failed to create normal query: %v", err)
-	}
-
-	normalTasks, err := repo.FindByProjectID(context.Background(), "proj-1", normalQuery)
-	if err != nil {
-		t.Fatalf("unexpected error in normal query (table should still exist): %v", err)
-	}
-
-	// テーブルが健在で、データが返る
-	if len(normalTasks) != 2 {
-		t.Errorf("expected 2 tasks after injection attempt, got %d (table should still exist): %v", len(normalTasks), getTaskIDs(normalTasks))
-	}
-	assertTaskIDs(t, normalTasks, []string{"proj1-1", "proj1-2"})
-	assertNoProjectLeakage(t, normalTasks, "proj-1")
 }
