@@ -75,6 +75,55 @@ func dateYMD(y int, m time.Month, d int) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
+// taskIDSet は task ID の集合を表す（順序に依存しない比較用）
+func taskIDSet(tasks []*domain.Task) map[string]struct{} {
+	set := make(map[string]struct{})
+	for _, t := range tasks {
+		set[t.ID] = struct{}{}
+	}
+	return set
+}
+
+// assertTaskIDs は返されたタスクの ID が期待値と一致することを検証する（順序不問）
+func assertTaskIDs(t *testing.T, tasks []*domain.Task, expectedIDs []string) {
+	t.Helper()
+	actualSet := taskIDSet(tasks)
+	expectedSet := make(map[string]struct{})
+	for _, id := range expectedIDs {
+		expectedSet[id] = struct{}{}
+	}
+
+	if len(actualSet) != len(expectedSet) {
+		t.Errorf("task count mismatch: expected %d tasks, got %d. ExpectedIDs: %v, ActualIDs: %v", len(expectedSet), len(actualSet), expectedIDs, getTaskIDs(tasks))
+		return
+	}
+
+	for id := range expectedSet {
+		if _, ok := actualSet[id]; !ok {
+			t.Errorf("expected task ID %s not found. ExpectedIDs: %v, ActualIDs: %v", id, expectedIDs, getTaskIDs(tasks))
+		}
+	}
+}
+
+// assertNoProjectLeakage は proj-2 のタスクが混入していないことを検証する
+func assertNoProjectLeakage(t *testing.T, tasks []*domain.Task, projectID string) {
+	t.Helper()
+	for _, task := range tasks {
+		if task.ProjectID != projectID {
+			t.Errorf("project leakage detected: task %s belongs to project %s, expected %s", task.ID, task.ProjectID, projectID)
+		}
+	}
+}
+
+// getTaskIDs はタスクの ID リストを返す（デバッグ用）
+func getTaskIDs(tasks []*domain.Task) []string {
+	ids := make([]string, len(tasks))
+	for i, t := range tasks {
+		ids[i] = t.ID
+	}
+	return ids
+}
+
 // TestSQLTaskRepository_FindByProjectID_SortByPriority はpriorityソートを検証する。
 func TestSQLTaskRepository_FindByProjectID_SortByPriority(t *testing.T) {
 	db := setupTestDB(t)
@@ -235,4 +284,766 @@ func TestSQLTaskRepository_FindByProjectID_MultipleSortKeys(t *testing.T) {
 	if tasks[2].ID != "task-c" {
 		t.Errorf("expected task-c at index 2, got %s", tasks[2].ID)
 	}
+}
+
+// ============================================================================
+// Filter: Status Tests
+// ============================================================================
+
+// TestSQLTaskRepository_FindByProjectID_Filter_Status_Single は単一 status フィルタを検証する。
+func TestSQLTaskRepository_FindByProjectID_Filter_Status_Single(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+	user2 := "user-2"
+
+	insertTasks(t, db, []seedTask{
+		// proj-1: todo, in_progress, done を混在
+		{ID: "proj1-todo", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-inprogress", ProjectID: "proj-1", Title: "beta", Status: "in_progress", Priority: "medium", AssigneeID: &user2, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-done", ProjectID: "proj-1", Title: "gamma", Status: "done", Priority: "low", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		// proj-2: 混入防止のため
+		{ID: "proj2-todo", ProjectID: "proj-2", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-done", ProjectID: "proj-2", Title: "epsilon", Status: "done", Priority: "medium", AssigneeID: &user2, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(domain.WithStatusFilter("todo"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// todo のみ返る
+	assertTaskIDs(t, tasks, []string{"proj1-todo"})
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Filter_Status_Multiple は複数 status フィルタを検証する。
+func TestSQLTaskRepository_FindByProjectID_Filter_Status_Multiple(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-todo", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-inprogress", ProjectID: "proj-1", Title: "beta", Status: "in_progress", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-done", ProjectID: "proj-1", Title: "gamma", Status: "done", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-todo", ProjectID: "proj-2", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-done", ProjectID: "proj-2", Title: "epsilon", Status: "done", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(domain.WithStatusFilter("todo,done"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// todo と done のみ返る（in_progress は返らない）
+	assertTaskIDs(t, tasks, []string{"proj1-todo", "proj1-done"})
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Filter_Status_InvalidValue は無効な status を検証する。
+func TestSQLTaskRepository_FindByProjectID_Filter_Status_InvalidValue(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-todo", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-todo", ProjectID: "proj-2", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+	})
+
+	// 無効な status を直接設定（buildQuery は string(status) を使うので、直接構造体を作成）
+	query := &domain.TaskQuery{
+		Statuses: []domain.TaskStatus{domain.TaskStatus("invalid")},
+		Limit:    10,
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	// SQL エラーは起きない（パラメタとして扱われる）
+	if err != nil {
+		t.Fatalf("unexpected error (should not cause SQL error): %v", err)
+	}
+
+	// invalid はヒット0（実質無視ではなく値として扱うが、マッチしない）
+	if len(tasks) != 0 {
+		t.Errorf("expected 0 tasks for invalid status, got %d: %v", len(tasks), getTaskIDs(tasks))
+	}
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// ============================================================================
+// Filter: Priority Tests
+// ============================================================================
+
+// TestSQLTaskRepository_FindByProjectID_Filter_Priority_Single は単一 priority フィルタを検証する。
+func TestSQLTaskRepository_FindByProjectID_Filter_Priority_Single(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-high", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-medium", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-low", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-high", ProjectID: "proj-2", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(domain.WithPriorityFilter("high"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertTaskIDs(t, tasks, []string{"proj1-high"})
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Filter_Priority_Multiple は複数 priority フィルタを検証する。
+func TestSQLTaskRepository_FindByProjectID_Filter_Priority_Multiple(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-high", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-medium", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-low", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-high", ProjectID: "proj-2", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(domain.WithPriorityFilter("high,low"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// high と low のみ返る（medium は返らない）
+	assertTaskIDs(t, tasks, []string{"proj1-high", "proj1-low"})
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Filter_Priority_InvalidValue は無効な priority を検証する。
+func TestSQLTaskRepository_FindByProjectID_Filter_Priority_InvalidValue(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-high", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-high", ProjectID: "proj-2", Title: "beta", Status: "todo", Priority: "high", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+	})
+
+	// 無効な priority を直接設定
+	query := &domain.TaskQuery{
+		Priorities: []domain.TaskPriority{domain.TaskPriority("pwn")},
+		Limit:      10,
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error (should not cause SQL error): %v", err)
+	}
+
+	// pwn はヒット0
+	if len(tasks) != 0 {
+		t.Errorf("expected 0 tasks for invalid priority, got %d: %v", len(tasks), getTaskIDs(tasks))
+	}
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// ============================================================================
+// Filter: AssigneeID Tests
+// ============================================================================
+
+// TestSQLTaskRepository_FindByProjectID_Filter_AssigneeID は assigneeId フィルタを検証する。
+func TestSQLTaskRepository_FindByProjectID_Filter_AssigneeID(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+	user2 := "user-2"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-user1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-user2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: &user2, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-null", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-user1", ProjectID: "proj-2", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(domain.WithAssigneeIDFilter("user-1"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertTaskIDs(t, tasks, []string{"proj1-user1"})
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Filter_AssigneeID_NilOrEmptyIgnored は nil/empty assigneeId が無視されることを検証する。
+func TestSQLTaskRepository_FindByProjectID_Filter_AssigneeID_NilOrEmptyIgnored(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+	user2 := "user-2"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-user1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-user2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: &user2, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-null", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-user1", ProjectID: "proj-2", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	// nil の時は全件（project scope内）を返す
+	query1, err := domain.NewTaskQuery(domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+	query1.AssigneeID = nil
+
+	tasks1, err := repo.FindByProjectID(context.Background(), "proj-1", query1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertTaskIDs(t, tasks1, []string{"proj1-user1", "proj1-user2", "proj1-null"})
+	assertNoProjectLeakage(t, tasks1, "proj-1")
+
+	// "" の時も nil と同じ挙動（絞られない）
+	query2, err := domain.NewTaskQuery(domain.WithAssigneeIDFilter(""), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks2, err := repo.FindByProjectID(context.Background(), "proj-1", query2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// WithAssigneeIDFilter("") は nil を設定するので、全件返る
+	assertTaskIDs(t, tasks2, []string{"proj1-user1", "proj1-user2", "proj1-null"})
+	assertNoProjectLeakage(t, tasks2, "proj-1")
+}
+
+// ============================================================================
+// Combined Filter Tests
+// ============================================================================
+
+// TestSQLTaskRepository_FindByProjectID_Filter_Combined は複合フィルタを検証する。
+func TestSQLTaskRepository_FindByProjectID_Filter_Combined(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+	user2 := "user-2"
+
+	insertTasks(t, db, []seedTask{
+		// proj-1: 条件に合うもの
+		{ID: "proj1-match", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-done-high-user1", ProjectID: "proj-1", Title: "beta", Status: "done", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		// proj-1: 条件に合わないもの
+		{ID: "proj1-todo-medium-user1", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "medium", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-todo-high-user2", ProjectID: "proj-1", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user2, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-inprogress-high-user1", ProjectID: "proj-1", Title: "epsilon", Status: "in_progress", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		// proj-2: 混入防止
+		{ID: "proj2-match", ProjectID: "proj-2", Title: "zeta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(
+		domain.WithStatusFilter("todo,done"),
+		domain.WithPriorityFilter("high"),
+		domain.WithAssigneeIDFilter("user-1"),
+		domain.WithLimit(10),
+	)
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// status=[todo,done] AND priority=[high] AND assigneeId=user-1 の AND 条件
+	assertTaskIDs(t, tasks, []string{"proj1-match", "proj1-done-high-user1"})
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Filter_NoHit は 0 件になるケースを検証する。
+func TestSQLTaskRepository_FindByProjectID_Filter_NoHit(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+	user2 := "user-2"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-todo-medium-user1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "medium", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-done-low-user2", ProjectID: "proj-1", Title: "beta", Status: "done", Priority: "low", AssigneeID: &user2, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-todo-high-user1", ProjectID: "proj-2", Title: "gamma", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(
+		domain.WithStatusFilter("todo"),
+		domain.WithPriorityFilter("high"),
+		domain.WithAssigneeIDFilter("user-2"),
+		domain.WithLimit(10),
+	)
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// 0 件になる（todo AND high AND user-2 は存在しない）
+	if len(tasks) != 0 {
+		t.Errorf("expected 0 tasks, got %d: %v", len(tasks), getTaskIDs(tasks))
+	}
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// ============================================================================
+// Search (q / title ILIKE) Tests
+// ============================================================================
+
+// TestSQLTaskRepository_FindByProjectID_Search_Title_Partial は title の部分一致検索を検証する。
+func TestSQLTaskRepository_FindByProjectID_Search_Title_Partial(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-alpha", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-ALPHA", ProjectID: "proj-1", Title: "ALPHA", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-beta", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-alpha", ProjectID: "proj-2", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(domain.WithQueryFilter("alp"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// "alp" で "alpha" と "ALPHA" がヒット（大小無視）
+	assertTaskIDs(t, tasks, []string{"proj1-alpha", "proj1-ALPHA"})
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Search_MinLength_1 は最小長 1 の検索を検証する。
+func TestSQLTaskRepository_FindByProjectID_Search_MinLength_1(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-alpha", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-beta", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-alpha", ProjectID: "proj-2", Title: "alpha", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(domain.WithQueryFilter("a"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	// SQL エラーが起きず、期待した結果が返る（本テストでは alpha と beta が返る）
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// "a" は "alpha" と "beta" の両方に含まれる
+	assertTaskIDs(t, tasks, []string{"proj1-alpha", "proj1-beta"})
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Search_ScopedToProject は検索が project スコープ内に限定されることを検証する。
+func TestSQLTaskRepository_FindByProjectID_Search_ScopedToProject(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-other", ProjectID: "proj-1", Title: "other", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-alpha", ProjectID: "proj-2", Title: "alpha", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-alpha2", ProjectID: "proj-2", Title: "alpha task", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(domain.WithQueryFilter("alpha"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// proj-2 側にだけ "alpha" があっても、proj-1 の検索結果に出ない（露出防止）
+	if len(tasks) != 0 {
+		t.Errorf("expected 0 tasks (proj-2 should not leak), got %d: %v", len(tasks), getTaskIDs(tasks))
+	}
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Search_SpecialCharacters は特殊文字を含むタイトルの検索を検証する。
+func TestSQLTaskRepository_FindByProjectID_Search_SpecialCharacters(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-special1", ProjectID: "proj-1", Title: "x'y", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-special2", ProjectID: "proj-1", Title: "100% legit", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-special", ProjectID: "proj-2", Title: "x'y", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	// "x'" で検索（特殊文字が含まれる）
+	query1, err := domain.NewTaskQuery(domain.WithQueryFilter("x'"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks1, err := repo.FindByProjectID(context.Background(), "proj-1", query1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertTaskIDs(t, tasks1, []string{"proj1-special1"})
+	assertNoProjectLeakage(t, tasks1, "proj-1")
+
+	// "100%" で検索
+	query2, err := domain.NewTaskQuery(domain.WithQueryFilter("100%"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks2, err := repo.FindByProjectID(context.Background(), "proj-1", query2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertTaskIDs(t, tasks2, []string{"proj1-special2"})
+	assertNoProjectLeakage(t, tasks2, "proj-1")
+}
+
+// ============================================================================
+// Limit Tests
+// ============================================================================
+
+// TestSQLTaskRepository_FindByProjectID_Limit_1 は limit=1 を検証する。
+func TestSQLTaskRepository_FindByProjectID_Limit_1(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-3", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-1", ProjectID: "proj-2", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(domain.WithLimit(1))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// limit=1 で必ず 1件
+	if len(tasks) != 1 {
+		t.Errorf("expected 1 task, got %d: %v", len(tasks), getTaskIDs(tasks))
+	}
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Limit_ExactCount は limit=seed数 を検証する。
+func TestSQLTaskRepository_FindByProjectID_Limit_ExactCount(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-3", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-1", ProjectID: "proj-2", Title: "delta", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	query, err := domain.NewTaskQuery(domain.WithLimit(3))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// limit=3, seed=3 で 3件
+	if len(tasks) != 3 {
+		t.Errorf("expected 3 tasks, got %d: %v", len(tasks), getTaskIDs(tasks))
+	}
+	assertTaskIDs(t, tasks, []string{"proj1-1", "proj1-2", "proj1-3"})
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Limit_Zero は limit=0 を検証する。
+func TestSQLTaskRepository_FindByProjectID_Limit_Zero(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-1", ProjectID: "proj-2", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+	})
+
+	// limit=0 は SQL 的に LIMIT 0 なので 0件を期待（現仕様に合わせる）
+	query := &domain.TaskQuery{
+		Limit: 0,
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// LIMIT 0 は 0件を返す
+	if len(tasks) != 0 {
+		t.Errorf("expected 0 tasks for limit=0, got %d: %v", len(tasks), getTaskIDs(tasks))
+	}
+	assertNoProjectLeakage(t, tasks, "proj-1")
+}
+
+// TestSQLTaskRepository_FindByProjectID_Limit_Negative_ShouldError は limit=-1 がエラーになることを検証する。
+func TestSQLTaskRepository_FindByProjectID_Limit_Negative_ShouldError(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	// limit=-1 は Postgres でエラーになるはず
+	query := &domain.TaskQuery{
+		Limit: -1,
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	// err!=nil を期待（異常系）
+	if err == nil {
+		t.Errorf("expected error for limit=-1, but got nil. Tasks returned: %v", getTaskIDs(tasks))
+	}
+}
+
+// ============================================================================
+// Security Tests (SQL Injection / Data Leakage)
+// ============================================================================
+
+// TestSQLTaskRepository_FindByProjectID_Security_SQLi_InQuery_DoesNotBypassFilters は SQLi がフィルタをバイパスしないことを検証する。
+func TestSQLTaskRepository_FindByProjectID_Security_SQLi_InQuery_DoesNotBypassFilters(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-normal", ProjectID: "proj-1", Title: "normal task", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-inject", ProjectID: "proj-1", Title: "100% legit", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-special", ProjectID: "proj-1", Title: "x'y", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-secret", ProjectID: "proj-2", Title: "secret", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	// SQLi 攻撃文字列
+	query, err := domain.NewTaskQuery(domain.WithQueryFilter("%' OR 1=1 --"), domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	// err==nil を優先（パラメタ扱いで安全に処理されるのが理想）
+	if err != nil {
+		t.Fatalf("unexpected error (should be handled safely): %v", err)
+	}
+
+	// 常に leakage 検証を実行（0件でも将来のバグで proj-2 が混ざった場合に確実に落とせる）
+	assertNoProjectLeakage(t, tasks, "proj-1")
+
+	// "%' OR 1=1 --" は通常のタスクタイトルには含まれないので、0件が期待
+	if len(tasks) != 0 {
+		t.Errorf("expected 0 tasks for SQLi attack string, got %d: %v", len(tasks), getTaskIDs(tasks))
+	}
+}
+
+// TestSQLTaskRepository_FindByProjectID_Security_SQLi_InAssigneeID_DoesNotBypass は assigneeId での SQLi がバイパスしないことを検証する。
+func TestSQLTaskRepository_FindByProjectID_Security_SQLi_InAssigneeID_DoesNotBypass(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-user1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj2-secret", ProjectID: "proj-2", Title: "secret", Status: "todo", Priority: "medium", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+	})
+
+	// SQLi 攻撃文字列
+	maliciousAssigneeID := "user-1' OR '1'='1"
+	query := &domain.TaskQuery{
+		AssigneeID: &maliciousAssigneeID,
+		Limit:      10,
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	// err==nil を優先（パラメタ扱いで安全に処理されるのが理想）
+	if err != nil {
+		t.Fatalf("unexpected error (should be handled safely): %v", err)
+	}
+
+	// 常に leakage 検証を実行（0件でも将来のバグで proj-2 が混ざった場合に確実に落とせる）
+	assertNoProjectLeakage(t, tasks, "proj-1")
+
+	// "user-1' OR '1'='1" という assignee_id は存在しないので、0件が期待
+	if len(tasks) != 0 {
+		t.Errorf("expected 0 tasks for SQLi attack string, got %d: %v", len(tasks), getTaskIDs(tasks))
+	}
+}
+
+// TestSQLTaskRepository_FindByProjectID_Security_SortKeyInjection_Ignored は sortKey でのインジェクションが無視されることを検証する。
+func TestSQLTaskRepository_FindByProjectID_Security_SortKeyInjection_Ignored(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	now := time.Now().UTC()
+	user1 := "user-1"
+
+	insertTasks(t, db, []seedTask{
+		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
+		{ID: "proj1-2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
+	})
+
+	// 悪意のある sortKey を直接設定（buildOrderBy のホワイトリストで無視される）
+	query := &domain.TaskQuery{
+		SortOrders: []domain.SortOrder{
+			{Key: "createdAt; DROP TABLE tasks;--", Direction: domain.SortDirectionASC},
+		},
+		Limit: 10,
+	}
+
+	tasks, err := repo.FindByProjectID(context.Background(), "proj-1", query)
+	// クエリが壊れず落ちず、tasks テーブルも健在
+	if err != nil {
+		t.Fatalf("unexpected error (should be handled safely): %v", err)
+	}
+	// 悪意のある sortKey は無視されるので、デフォルトソートで返る（または空）
+	// ここではエラーが起きないことを確認するだけで十分
+	_ = tasks
+
+	// その後に通常クエリを実行して結果が返ること（テーブルが消えていない証明）
+	normalQuery, err := domain.NewTaskQuery(domain.WithLimit(10))
+	if err != nil {
+		t.Fatalf("failed to create normal query: %v", err)
+	}
+
+	normalTasks, err := repo.FindByProjectID(context.Background(), "proj-1", normalQuery)
+	if err != nil {
+		t.Fatalf("unexpected error in normal query (table should still exist): %v", err)
+	}
+
+	// テーブルが健在で、データが返る
+	if len(normalTasks) != 2 {
+		t.Errorf("expected 2 tasks after injection attempt, got %d (table should still exist): %v", len(normalTasks), getTaskIDs(normalTasks))
+	}
+	assertTaskIDs(t, normalTasks, []string{"proj1-1", "proj1-2"})
+	assertNoProjectLeakage(t, normalTasks, "proj-1")
 }
