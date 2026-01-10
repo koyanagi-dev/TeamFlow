@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -279,24 +278,41 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 
 	// limit
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		limit, err := strconv.Atoi(limitStr)
+		limit, err := ParseLimit(limitStr)
 		if err != nil {
-			writeErrorResponse(w, http.StatusBadRequest, "validation error", "limit must be an integer")
+			issue := toValidationIssue(err)
+			resp := NewValidationErrorResponse(issue)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(resp)
 			return
 		}
-		opts = append(opts, domain.WithLimit(limit))
+		if limit > 0 {
+			opts = append(opts, domain.WithLimit(limit))
+		}
 	}
+
+	// cursor パラメータは予約席なので受け取るが無視
+	_ = r.URL.Query().Get("cursor")
 
 	// Query Object を作成
 	query, err := domain.NewTaskQuery(opts...)
 	if err != nil {
-		writeErrorResponse(w, http.StatusBadRequest, "validation error", err.Error())
+		issue := toValidationIssue(err)
+		resp := NewValidationErrorResponse(issue)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
 
 	// Query Object のバリデーション
 	if err := query.Validate(); err != nil {
-		writeErrorResponse(w, http.StatusBadRequest, "validation error", err.Error())
+		issue := toValidationIssue(err)
+		resp := NewValidationErrorResponse(issue)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
 
@@ -310,9 +326,15 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// レスポンス形式: { "tasks": [...] } (OpenAPI仕様に準拠)
-	type tasksResponse struct {
+	// レスポンス形式: { "tasks": [...], "page": null } (OpenAPI仕様に準拠)
+	type pageInfo struct {
+		NextCursor *string `json:"nextCursor,omitempty"`
+		Limit      int     `json:"limit,omitempty"`
+	}
+
+	type listTasksResponse struct {
 		Tasks []taskResponse `json:"tasks"`
+		Page  *pageInfo      `json:"page,omitempty"`
 	}
 
 	responses := make([]taskResponse, 0, len(tasks))
@@ -331,9 +353,14 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		})
 	}
 
+	// page は今は nil でOK（cursor導入時に利用）
+	// 検索結果が 0 件でも 200 + tasks: [] を返す
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(tasksResponse{Tasks: responses})
+	_ = json.NewEncoder(w).Encode(listTasksResponse{
+		Tasks: responses,
+		Page:  nil,
+	})
 }
 
 type updateTaskRequest struct {

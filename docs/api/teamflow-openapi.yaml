@@ -567,6 +567,14 @@ paths:
             minimum: 1
             maximum: 200
             default: 200
+        - name: cursor
+          in: query
+          required: false
+          description: >
+            Cursor-based pagination 用のカーソル（opaque）。
+            指定した場合、サーバが返した nextCursor をそのまま次リクエストに渡す。
+          schema:
+            type: string
       responses:
         '200':
           description: タスク一覧
@@ -579,6 +587,23 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Task'
+                  page:
+                    type: object
+                    nullable: true
+                    description: ページング情報（cursor導入時に利用）
+                    properties:
+                      nextCursor:
+                        type: string
+                        nullable: true
+                      limit:
+                        type: integer
+                required: [tasks]
+        '400':
+          description: クエリパラメータのバリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       summary: タスク作成
       tags: [Tasks]
@@ -1003,18 +1028,51 @@ components:
 
   schemas:
     # -------- 共通 --------
+    ValidationIssue:
+      type: object
+      description: バリデーションエラーの1件分（どの入力のどこが問題か）
+      properties:
+        location:
+          type: string
+          description: エラー発生箇所
+          enum: [query, path, body]
+        field:
+          type: string
+          description: >
+            対象フィールド名（例: status, priority, sort, dueDateFrom）
+        code:
+          type: string
+          description: 機械判定用のエラーコード
+          example: INVALID_ENUM
+        message:
+          type: string
+          description: >
+            人間向けメッセージ（修正すべき内容が分かる文言）
+        rejectedValue:
+          nullable: true
+          description: >
+            受け付けられなかった入力値（出せる場合のみ）
+      required: [location, field, code, message]
+
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
-          description: "エラー種別コード（例: VALIDATION_ERROR）"
+          description: >
+            エラー種別コード（例: VALIDATION_ERROR）
         message:
           type: string
           description: 人間向けメッセージ
         details:
           type: object
           description: フィールド単位の詳細エラーなど
+          properties:
+            issues:
+              type: array
+              description: バリデーションエラーの詳細（複数件）
+              items:
+                $ref: '#/components/schemas/ValidationIssue'
       required: [error, message]
 
     # -------- User --------
