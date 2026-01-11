@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -277,26 +276,58 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		opts = append(opts, domain.WithSort(sortStr))
 	}
 
-	// limit
+	// cursor パラメータが指定された場合は 400 + NOT_IMPLEMENTED を返す
+	if cursor := r.URL.Query().Get("cursor"); cursor != "" {
+		rejected := cursor
+		issue := ValidationIssue{
+			Location:      "query",
+			Field:         "cursor",
+			Code:          "NOT_IMPLEMENTED",
+			Message:       "cursor-based pagination は現在開発中です。limit のみご利用ください。",
+			RejectedValue: &rejected,
+		}
+		resp := NewValidationErrorResponse(issue)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	// limit の default=200 を HTTP 層で明示
+	limit := 200
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		limit, err := strconv.Atoi(limitStr)
+		v, err := ParseLimit(limitStr)
 		if err != nil {
-			writeErrorResponse(w, http.StatusBadRequest, "validation error", "limit must be an integer")
+			issue := toValidationIssue(err)
+			resp := NewValidationErrorResponse(issue)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(resp)
 			return
 		}
-		opts = append(opts, domain.WithLimit(limit))
+		// ParseLimit 成功時は v>0 のはず
+		limit = v
 	}
+	opts = append(opts, domain.WithLimit(limit))
 
 	// Query Object を作成
 	query, err := domain.NewTaskQuery(opts...)
 	if err != nil {
-		writeErrorResponse(w, http.StatusBadRequest, "validation error", err.Error())
+		issue := toValidationIssue(err)
+		resp := NewValidationErrorResponse(issue)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
 
 	// Query Object のバリデーション
 	if err := query.Validate(); err != nil {
-		writeErrorResponse(w, http.StatusBadRequest, "validation error", err.Error())
+		issue := toValidationIssue(err)
+		resp := NewValidationErrorResponse(issue)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
 
@@ -310,9 +341,15 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// レスポンス形式: { "tasks": [...] } (OpenAPI仕様に準拠)
-	type tasksResponse struct {
+	// レスポンス形式: { "tasks": [...], "page": null } (OpenAPI仕様に準拠)
+	type pageInfo struct {
+		NextCursor *string `json:"nextCursor,omitempty"`
+		Limit      int     `json:"limit,omitempty"`
+	}
+
+	type listTasksResponse struct {
 		Tasks []taskResponse `json:"tasks"`
+		Page  *pageInfo      `json:"page,omitempty"`
 	}
 
 	responses := make([]taskResponse, 0, len(tasks))
@@ -331,9 +368,13 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		})
 	}
 
+	// page は現時点では省略（cursor実装後に返す）
+	// 検索結果が 0 件でも 200 + tasks: [] を返す
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(tasksResponse{Tasks: responses})
+	_ = json.NewEncoder(w).Encode(listTasksResponse{
+		Tasks: responses,
+	})
 }
 
 type updateTaskRequest struct {
