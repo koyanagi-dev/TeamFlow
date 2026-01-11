@@ -276,9 +276,27 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		opts = append(opts, domain.WithSort(sortStr))
 	}
 
-	// limit
+	// cursor パラメータが指定された場合は 400 + NOT_IMPLEMENTED を返す
+	if cursor := r.URL.Query().Get("cursor"); cursor != "" {
+		rejected := cursor
+		issue := ValidationIssue{
+			Location:      "query",
+			Field:         "cursor",
+			Code:          "NOT_IMPLEMENTED",
+			Message:       "cursor-based pagination は現在開発中です。limit のみご利用ください。",
+			RejectedValue: &rejected,
+		}
+		resp := NewValidationErrorResponse(issue)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	// limit の default=200 を HTTP 層で明示
+	limit := 200
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		limit, err := ParseLimit(limitStr)
+		v, err := ParseLimit(limitStr)
 		if err != nil {
 			issue := toValidationIssue(err)
 			resp := NewValidationErrorResponse(issue)
@@ -287,13 +305,10 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 			_ = json.NewEncoder(w).Encode(resp)
 			return
 		}
-		if limit > 0 {
-			opts = append(opts, domain.WithLimit(limit))
-		}
+		// ParseLimit 成功時は v>0 のはず
+		limit = v
 	}
-
-	// cursor パラメータは予約席なので受け取るが無視
-	_ = r.URL.Query().Get("cursor")
+	opts = append(opts, domain.WithLimit(limit))
 
 	// Query Object を作成
 	query, err := domain.NewTaskQuery(opts...)
@@ -353,13 +368,12 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		})
 	}
 
-	// page は今は nil でOK（cursor導入時に利用）
+	// page は現時点では省略（cursor実装後に返す）
 	// 検索結果が 0 件でも 200 + tasks: [] を返す
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(listTasksResponse{
 		Tasks: responses,
-		Page:  nil,
 	})
 }
 
