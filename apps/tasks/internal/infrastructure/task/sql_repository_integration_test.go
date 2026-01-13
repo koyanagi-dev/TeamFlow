@@ -948,3 +948,385 @@ func TestSQLTaskRepository_FindByProjectID_Security_SortKeyInjection_Ignored(t *
 		t.Errorf("expected error message to contain 'invalid sort key', got: %v", err)
 	}
 }
+
+// ============================================================================
+// Cursor Pagination Tests (v1)
+// ============================================================================
+
+// TestSQLTaskRepository_FindByProjectID_CursorPagination_Normal は正常系の cursor pagination を検証する。
+// - limit=2 で1ページ目取得 → page.nextCursor != nil
+// - nextCursor を付けて2ページ目取得
+// - 1ページ目と2ページ目に重複がない
+// - 合計が期待件数と一致（欠落なし）
+func TestSQLTaskRepository_FindByProjectID_CursorPagination_Normal(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+	secret := []byte("test-secret-key")
+
+	// 5件のタスクを作成（micro秒単位で差をつける）
+	insertTasks(t, db, []seedTask{
+		{ID: "task-001", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: base.Add(1 * time.Microsecond), UpdatedAt: base.Add(1 * time.Microsecond)},
+		{ID: "task-002", ProjectID: "proj-1", Title: "T2", Status: "todo", Priority: "medium", CreatedAt: base.Add(2 * time.Microsecond), UpdatedAt: base.Add(2 * time.Microsecond)},
+		{ID: "task-003", ProjectID: "proj-1", Title: "T3", Status: "todo", Priority: "low", CreatedAt: base.Add(3 * time.Microsecond), UpdatedAt: base.Add(3 * time.Microsecond)},
+		{ID: "task-004", ProjectID: "proj-1", Title: "T4", Status: "todo", Priority: "high", CreatedAt: base.Add(4 * time.Microsecond), UpdatedAt: base.Add(4 * time.Microsecond)},
+		{ID: "task-005", ProjectID: "proj-1", Title: "T5", Status: "todo", Priority: "medium", CreatedAt: base.Add(5 * time.Microsecond), UpdatedAt: base.Add(5 * time.Microsecond)},
+	})
+
+	// 1ページ目取得（limit=2）
+	query1, err := domain.NewTaskQuery(domain.WithLimit(2))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks1, err := repo.FindByProjectID(context.Background(), "proj-1", query1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(tasks1) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(tasks1))
+	}
+
+	// nextCursor を生成
+	lastTask1 := tasks1[len(tasks1)-1]
+	payload1 := domain.CursorPayload{
+		V:         1,
+		CreatedAt: domain.FormatCursorCreatedAt(lastTask1.CreatedAt),
+		ID:        lastTask1.ID,
+		ProjectID: "proj-1",
+		QHash:     query1.ComputeQHash("proj-1"),
+		IssuedAt:  time.Now().Unix(),
+	}
+	cursor1, err := domain.EncodeCursor(payload1, secret)
+	if err != nil {
+		t.Fatalf("failed to encode cursor: %v", err)
+	}
+
+	// 2ページ目取得（cursor を使用）
+	query2, err := domain.NewTaskQuery(
+		domain.WithLimit(2),
+		domain.WithCursor(cursor1, "proj-1", secret, time.Now()),
+	)
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks2, err := repo.FindByProjectID(context.Background(), "proj-1", query2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(tasks2) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(tasks2))
+	}
+
+	// 重複チェック
+	taskIDs1 := getTaskIDs(tasks1)
+	taskIDs2 := getTaskIDs(tasks2)
+	for _, id1 := range taskIDs1 {
+		for _, id2 := range taskIDs2 {
+			if id1 == id2 {
+				t.Errorf("duplicate task found: %s", id1)
+			}
+		}
+	}
+
+	// 合計件数チェック（5件すべて取得できているか）
+	allIDs := append(taskIDs1, taskIDs2...)
+	if len(allIDs) != 4 {
+		t.Errorf("expected 4 tasks total (2+2), got %d", len(allIDs))
+	}
+
+	// 順序チェック（createdAt ASC, id ASC）
+	if tasks1[0].ID != "task-001" || tasks1[1].ID != "task-002" {
+		t.Errorf("unexpected order for page 1: got %v", taskIDs1)
+	}
+	if tasks2[0].ID != "task-003" || tasks2[1].ID != "task-004" {
+		t.Errorf("unexpected order for page 2: got %v", taskIDs2)
+	}
+}
+
+// TestSQLTaskRepository_FindByProjectID_CursorPagination_TieBreaker は tie-breaker（createdAt同値でid順）を検証する。
+func TestSQLTaskRepository_FindByProjectID_CursorPagination_TieBreaker(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+	secret := []byte("test-secret-key")
+
+	// 同じ createdAt のタスクを複数作成（id で順序が決まる）
+	insertTasks(t, db, []seedTask{
+		{ID: "task-aaa", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: base, UpdatedAt: base},
+		{ID: "task-bbb", ProjectID: "proj-1", Title: "T2", Status: "todo", Priority: "medium", CreatedAt: base, UpdatedAt: base},
+		{ID: "task-ccc", ProjectID: "proj-1", Title: "T3", Status: "todo", Priority: "low", CreatedAt: base, UpdatedAt: base},
+	})
+
+	// 1ページ目取得（limit=2）
+	query1, err := domain.NewTaskQuery(domain.WithLimit(2))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks1, err := repo.FindByProjectID(context.Background(), "proj-1", query1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(tasks1) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(tasks1))
+	}
+
+	// id 順で並んでいることを確認
+	if tasks1[0].ID != "task-aaa" || tasks1[1].ID != "task-bbb" {
+		t.Errorf("unexpected order: got %v, expected [task-aaa, task-bbb]", getTaskIDs(tasks1))
+	}
+
+	// nextCursor を生成
+	lastTask1 := tasks1[len(tasks1)-1]
+	payload1 := domain.CursorPayload{
+		V:         1,
+		CreatedAt: domain.FormatCursorCreatedAt(lastTask1.CreatedAt),
+		ID:        lastTask1.ID,
+		ProjectID: "proj-1",
+		QHash:     query1.ComputeQHash("proj-1"),
+		IssuedAt:  time.Now().Unix(),
+	}
+	cursor1, err := domain.EncodeCursor(payload1, secret)
+	if err != nil {
+		t.Fatalf("failed to encode cursor: %v", err)
+	}
+
+	// 2ページ目取得（cursor を使用）
+	query2, err := domain.NewTaskQuery(
+		domain.WithLimit(2),
+		domain.WithCursor(cursor1, "proj-1", secret, time.Now()),
+	)
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks2, err := repo.FindByProjectID(context.Background(), "proj-1", query2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(tasks2) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(tasks2))
+	}
+
+	// 順序が崩れていないことを確認
+	if tasks2[0].ID != "task-ccc" {
+		t.Errorf("unexpected order: got %v, expected [task-ccc]", getTaskIDs(tasks2))
+	}
+}
+
+// TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_CursorWithSort は cursor + sort の併用エラーを検証する。
+func TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_CursorWithSort(t *testing.T) {
+	secret := []byte("test-secret-key")
+	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+
+	// cursor を生成
+	payload := domain.CursorPayload{
+		V:         1,
+		CreatedAt: domain.FormatCursorCreatedAt(base),
+		ID:        "task-001",
+		ProjectID: "proj-1",
+		QHash:     "test-hash",
+		IssuedAt:  time.Now().Unix(),
+	}
+	cursor, err := domain.EncodeCursor(payload, secret)
+	if err != nil {
+		t.Fatalf("failed to encode cursor: %v", err)
+	}
+
+	// cursor + sort を指定すると Validate() でエラーになる
+	query, err := domain.NewTaskQuery(
+		domain.WithLimit(2),
+		domain.WithCursor(cursor, "proj-1", secret, time.Now()),
+		domain.WithSort("priority"),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error in NewTaskQuery: %v", err)
+	}
+
+	err = query.Validate()
+	if err == nil {
+		t.Fatalf("expected error for cursor + sort, but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "sort is incompatible with cursor") {
+		t.Errorf("expected error message to contain 'sort is incompatible with cursor', got: %v", err)
+	}
+}
+
+// TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_InvalidFormat は cursor 形式不正エラーを検証する。
+func TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_InvalidFormat(t *testing.T) {
+	secret := []byte("test-secret-key")
+
+	// 形式不正な cursor（.なし）
+	_, err := domain.NewTaskQuery(
+		domain.WithLimit(2),
+		domain.WithCursor("invalid-cursor-no-dot", "proj-1", secret, time.Now()),
+	)
+	if err == nil {
+		t.Fatalf("expected error for invalid cursor format, but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid cursor format") {
+		t.Errorf("expected error message to contain 'invalid cursor format', got: %v", err)
+	}
+
+	// base64 壊れ
+	_, err = domain.NewTaskQuery(
+		domain.WithLimit(2),
+		domain.WithCursor("invalid.base64!!!", "proj-1", secret, time.Now()),
+	)
+	if err == nil {
+		t.Fatalf("expected error for invalid cursor format, but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid cursor format") {
+		t.Errorf("expected error message to contain 'invalid cursor format', got: %v", err)
+	}
+}
+
+// TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_InvalidSignature は署名改ざんエラーを検証する。
+func TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_InvalidSignature(t *testing.T) {
+	secret := []byte("test-secret-key")
+	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+
+	// 正しい cursor を生成
+	payload := domain.CursorPayload{
+		V:         1,
+		CreatedAt: domain.FormatCursorCreatedAt(base),
+		ID:        "task-001",
+		ProjectID: "proj-1",
+		QHash:     "test-hash",
+		IssuedAt:  time.Now().Unix(),
+	}
+	cursor, err := domain.EncodeCursor(payload, secret)
+	if err != nil {
+		t.Fatalf("failed to encode cursor: %v", err)
+	}
+
+	// 署名を改ざん（最後の文字を変更）
+	tamperedCursor := cursor[:len(cursor)-1] + "X"
+
+	// 異なる secret で検証
+	wrongSecret := []byte("wrong-secret")
+	_, err = domain.NewTaskQuery(
+		domain.WithLimit(2),
+		domain.WithCursor(tamperedCursor, "proj-1", wrongSecret, time.Now()),
+	)
+	if err == nil {
+		t.Fatalf("expected error for invalid signature, but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid cursor signature") {
+		t.Errorf("expected error message to contain 'invalid cursor signature', got: %v", err)
+	}
+}
+
+// TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_Expired は期限切れエラーを検証する。
+func TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_Expired(t *testing.T) {
+	secret := []byte("test-secret-key")
+	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+
+	// 過去の iat で cursor を生成（24時間以上前）
+	payload := domain.CursorPayload{
+		V:         1,
+		CreatedAt: domain.FormatCursorCreatedAt(base),
+		ID:        "task-001",
+		ProjectID: "proj-1",
+		QHash:     "test-hash",
+		IssuedAt:  time.Now().Unix() - 86401, // 24時間 + 1秒前
+	}
+	cursor, err := domain.EncodeCursor(payload, secret)
+	if err != nil {
+		t.Fatalf("failed to encode cursor: %v", err)
+	}
+
+	// 期限切れエラー
+	_, err = domain.NewTaskQuery(
+		domain.WithLimit(2),
+		domain.WithCursor(cursor, "proj-1", secret, time.Now()),
+	)
+	if err == nil {
+		t.Fatalf("expected error for expired cursor, but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "cursor expired") {
+		t.Errorf("expected error message to contain 'cursor expired', got: %v", err)
+	}
+}
+
+// TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_QueryMismatch は qhash 不一致エラーを検証する。
+func TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_QueryMismatch(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewSQLTaskRepository(db)
+	resetTasksTable(t, db)
+
+	secret := []byte("test-secret-key")
+	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+
+	// タスクを作成
+	insertTasks(t, db, []seedTask{
+		{ID: "task-001", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: base, UpdatedAt: base},
+	})
+
+	// フィルタなしで cursor を生成
+	query1, err := domain.NewTaskQuery(domain.WithLimit(2))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
+
+	tasks1, err := repo.FindByProjectID(context.Background(), "proj-1", query1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lastTask1 := tasks1[len(tasks1)-1]
+	payload1 := domain.CursorPayload{
+		V:         1,
+		CreatedAt: domain.FormatCursorCreatedAt(lastTask1.CreatedAt),
+		ID:        lastTask1.ID,
+		ProjectID: "proj-1",
+		QHash:     query1.ComputeQHash("proj-1"), // フィルタなしの qhash
+		IssuedAt:  time.Now().Unix(),
+	}
+	cursor1, err := domain.EncodeCursor(payload1, secret)
+	if err != nil {
+		t.Fatalf("failed to encode cursor: %v", err)
+	}
+
+	// フィルタを追加して cursor を再利用（qhash 不一致）
+	query2, err := domain.NewTaskQuery(
+		domain.WithLimit(2),
+		domain.WithStatusFilter("done"), // フィルタを追加
+		domain.WithCursor(cursor1, "proj-1", secret, time.Now()),
+	)
+	if err == nil {
+		t.Fatalf("expected error for query mismatch, but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "cursor query mismatch") {
+		t.Errorf("expected error message to contain 'cursor query mismatch', got: %v", err)
+	}
+
+	// projectID 不一致も検証
+	query3, err := domain.NewTaskQuery(
+		domain.WithLimit(2),
+		domain.WithCursor(cursor1, "proj-2", secret, time.Now()), // 異なる projectID
+	)
+	if err == nil {
+		t.Fatalf("expected error for query mismatch (projectID), but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "cursor query mismatch") {
+		t.Errorf("expected error message to contain 'cursor query mismatch', got: %v", err)
+	}
+}

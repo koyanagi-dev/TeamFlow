@@ -158,27 +158,48 @@ func (r *SQLTaskRepository) buildQuery(projectID string, query *domain.TaskQuery
 		argIndex++
 	}
 
+	// Cursor がある場合の seek 条件
+	if query.Cursor != nil {
+		// WHERE: (created_at > $X) OR (created_at = $X AND id > $Y)
+		seekCondition := fmt.Sprintf("(created_at > $%d) OR (created_at = $%d AND id > $%d)", argIndex, argIndex, argIndex+1)
+		whereParts = append(whereParts, seekCondition)
+		args = append(args, query.Cursor.CreatedAt, query.Cursor.ID)
+		argIndex += 2
+	}
+
 	// WHERE句を組み立て
 	whereClause := ""
 	if len(whereParts) > 0 {
 		whereClause = "WHERE " + strings.Join(whereParts, " AND ")
 	}
 
-	// ORDER BY句を組み立て（ホワイトリストで安全に）
-	orderByParts := r.buildOrderBy(query)
-	orderByClause := ""
-	if len(orderByParts) > 0 {
-		orderByClause = "ORDER BY " + strings.Join(orderByParts, ", ")
+	// ORDER BY句を組み立て
+	// cursor がある場合は created_at ASC, id ASC に固定（v1 の制限）
+	var orderByClause string
+	if query.Cursor != nil {
+		// cursor 使用時は created_at ASC, id ASC に固定
+		orderByClause = "ORDER BY created_at ASC, id ASC"
 	} else {
-		// デフォルトソート: createdAt ASC
-		orderByClause = "ORDER BY created_at ASC"
+		// cursor がない場合は既存のロジック
+		orderByParts := r.buildOrderBy(query)
+		if len(orderByParts) > 0 {
+			orderByClause = "ORDER BY " + strings.Join(orderByParts, ", ")
+		} else {
+			// デフォルトソート: createdAt ASC
+			orderByClause = "ORDER BY created_at ASC"
+		}
+		// 安定化のため、最後にid ASCを追加
+		orderByClause += ", id ASC"
 	}
-	// 安定化のため、最後にid ASCを追加
-	orderByClause += ", id ASC"
 
-	// LIMIT句
+	// LIMIT句（nextCursor 判定のため limit + 1 件取得）
+	limitValue := query.Limit
+	if query.Cursor != nil {
+		// cursor がある場合は limit + 1 件取得して nextCursor 判定
+		limitValue = query.Limit + 1
+	}
 	limitClause := fmt.Sprintf("LIMIT $%d", argIndex)
-	args = append(args, query.Limit)
+	args = append(args, limitValue)
 
 	// 最終的なSQL
 	sql := fmt.Sprintf(`
