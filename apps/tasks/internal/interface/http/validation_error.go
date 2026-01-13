@@ -136,6 +136,56 @@ func toValidationIssue(err error) ValidationIssue {
 			RejectedValue: rejected,
 		}
 
+	case strings.Contains(msg, "sort is incompatible with cursor"):
+		rejected := extractRejectedValue(msg)
+		return ValidationIssue{
+			Location:      "query",
+			Field:         "sort",
+			Code:          "INCOMPATIBLE_WITH_CURSOR",
+			Message:       "cursor を使用する場合、sort は指定できません。",
+			RejectedValue: rejected,
+		}
+
+	case strings.Contains(msg, "invalid cursor format"):
+		rejected := extractRejectedValue(msg)
+		return ValidationIssue{
+			Location:      "query",
+			Field:         "cursor",
+			Code:          "INVALID_FORMAT",
+			Message:       "cursor の形式が不正です。",
+			RejectedValue: rejected,
+		}
+
+	case strings.Contains(msg, "invalid cursor signature"):
+		rejected := extractRejectedValue(msg)
+		return ValidationIssue{
+			Location:      "query",
+			Field:         "cursor",
+			Code:          "INVALID_SIGNATURE",
+			Message:       "cursor の署名が不正です。",
+			RejectedValue: rejected,
+		}
+
+	case strings.Contains(msg, "cursor expired"):
+		rejected := extractRejectedValue(msg)
+		return ValidationIssue{
+			Location:      "query",
+			Field:         "cursor",
+			Code:          "EXPIRED",
+			Message:       "cursor の有効期限が切れています。",
+			RejectedValue: rejected,
+		}
+
+	case strings.Contains(msg, "cursor query mismatch"):
+		rejected := extractRejectedValue(msg)
+		return ValidationIssue{
+			Location:      "query",
+			Field:         "cursor",
+			Code:          "QUERY_MISMATCH",
+			Message:       "cursor のクエリ条件が一致しません。フィルタ等が変更された可能性があります。",
+			RejectedValue: rejected,
+		}
+
 	default:
 		// 想定外でも 400 の形式は崩さない（ログには msg を残すのが推奨）
 		return ValidationIssue{

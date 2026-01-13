@@ -1,8 +1,11 @@
 package task
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -23,6 +26,18 @@ type TaskQuery struct {
 
 	// Limit
 	Limit int // limit (default 200, max 200, min 1)
+
+	// Cursor
+	Cursor *TaskCursor // cursor デコード結果
+}
+
+// TaskCursor は cursor のデコード結果を保持する。
+type TaskCursor struct {
+	CreatedAt time.Time
+	ID        string
+	ProjectID string
+	QHash     string
+	IssuedAt  int64
 }
 
 // SortOrder はソート順を表す。
@@ -254,6 +269,117 @@ func (q *TaskQuery) Validate() error {
 		}
 	}
 
+	// cursor + sort 併用禁止
+	if q.Cursor != nil && len(q.SortOrders) > 0 {
+		return errors.New("sort is incompatible with cursor")
+	}
+
 	return nil
+}
+
+// ComputeQHash はクエリ条件から qhash を計算する。
+// projectId と filter/search 等のパラメータを正規化してハッシュ化した短い文字列を返す。
+func (q *TaskQuery) ComputeQHash(projectID string) string {
+	// 正規化: 複数値（status/priority 等）はソートして join（順序差を吸収）
+	parts := []string{}
+
+	// projectID
+	parts = append(parts, "projectId:"+projectID)
+
+	// statuses（ソート済み）
+	if len(q.Statuses) > 0 {
+		statusStrs := make([]string, len(q.Statuses))
+		for i, s := range q.Statuses {
+			statusStrs[i] = string(s)
+		}
+		sort.Strings(statusStrs)
+		parts = append(parts, "status:"+strings.Join(statusStrs, ","))
+	}
+
+	// priorities（ソート済み）
+	if len(q.Priorities) > 0 {
+		priorityStrs := make([]string, len(q.Priorities))
+		for i, p := range q.Priorities {
+			priorityStrs[i] = string(p)
+		}
+		sort.Strings(priorityStrs)
+		parts = append(parts, "priority:"+strings.Join(priorityStrs, ","))
+	}
+
+	// assigneeId
+	if q.AssigneeID != nil {
+		parts = append(parts, "assigneeId:"+*q.AssigneeID)
+	}
+
+	// dueDateFrom
+	if q.DueDateFrom != nil {
+		parts = append(parts, "dueDateFrom:"+q.DueDateFrom.Format("2006-01-02"))
+	}
+
+	// dueDateTo
+	if q.DueDateTo != nil {
+		parts = append(parts, "dueDateTo:"+q.DueDateTo.Format("2006-01-02"))
+	}
+
+	// q (title検索)
+	if q.Query != nil {
+		parts = append(parts, "q:"+*q.Query)
+	}
+
+	// ソート済みの parts を join
+	normalized := strings.Join(parts, "|")
+
+	// sha256 の先頭 8byte を Base64URL でエンコード
+	hash := sha256.Sum256([]byte(normalized))
+	return base64.RawURLEncoding.EncodeToString(hash[:8])
+}
+
+// WithCursor は cursor をデコードし、検証して設定する。
+func WithCursor(cursorStr string, projectID string, secret []byte, now time.Time) TaskQueryOption {
+	return func(q *TaskQuery) error {
+		if cursorStr == "" {
+			return nil
+		}
+
+		// cursor をデコード
+		payload, err := DecodeCursor(cursorStr, secret)
+		if err != nil {
+			// エラーメッセージをそのまま返す（validation_error.go で判定）
+			return err
+		}
+
+		// createdAt をパース（micro秒丸め）
+		createdAt, err := ParseCursorCreatedAt(payload.CreatedAt)
+		if err != nil {
+			return errors.New("invalid cursor format")
+		}
+
+		// 有効期限チェック
+		if err := ValidateCursorExpiry(payload, now); err != nil {
+			return err
+		}
+
+		// projectID の一致確認
+		if payload.ProjectID != projectID {
+			return errors.New("cursor query mismatch")
+		}
+
+		// qhash の一致確認
+		computedQHash := q.ComputeQHash(projectID)
+		if computedQHash != payload.QHash {
+			return errors.New("cursor query mismatch")
+		}
+
+		// TaskCursor を設定
+		q.Cursor = &TaskCursor{
+			CreatedAt: createdAt,
+			ID:        payload.ID,
+			ProjectID: payload.ProjectID,
+			QHash:     payload.QHash,
+			IssuedAt:  payload.IssuedAt,
+		}
+
+		return nil
+	}
 }
 

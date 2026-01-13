@@ -572,7 +572,8 @@ paths:
           required: false
           description: >
             Cursor-based pagination 用のカーソル（opaque）。
-            指定した場合、サーバが返した nextCursor をそのまま次リクエストに渡す。
+            前回のレスポンスで返された page.nextCursor をそのまま次回リクエストの cursor に指定してください。
+            cursor を使用する場合、sort パラメータは指定できません（v1 の制限）。
           schema:
             type: string
       responses:
@@ -589,14 +590,18 @@ paths:
                       $ref: '#/components/schemas/Task'
                   page:
                     type: object
-                    nullable: true
-                    description: ページング情報（cursor導入時に利用）
+                    description: ページング情報
                     properties:
                       nextCursor:
                         type: string
                         nullable: true
+                        description: >
+                          次ページ取得用のカーソル。null の場合は末尾（次ページなし）を表します。
+                          この値を次回リクエストの cursor パラメータに指定してください。
                       limit:
                         type: integer
+                        description: 取得件数の上限（リクエストで指定された limit 値）
+                    required: [nextCursor, limit]
                 required: [tasks]
         '400':
           description: クエリパラメータのバリデーションエラー
@@ -1042,7 +1047,17 @@ components:
             対象フィールド名（例: status, priority, sort, dueDateFrom）
         code:
           type: string
-          description: 機械判定用のエラーコード
+          description: >
+            機械判定用のエラーコード。
+            主なコード:
+            - INVALID_ENUM: 無効な列挙値
+            - INVALID_FORMAT: 形式不正（例: cursor の形式不正、日付形式不正）
+            - INVALID_RANGE: 範囲外の値（例: limit が範囲外）
+            - CONSTRAINT_VIOLATION: 制約違反（例: dueDateFrom > dueDateTo）
+            - INCOMPATIBLE_WITH_CURSOR: cursor と sort の併用（v1 では不許可）
+            - INVALID_SIGNATURE: cursor の署名不一致（改ざん疑い）
+            - EXPIRED: cursor の有効期限切れ
+            - QUERY_MISMATCH: cursor のクエリ条件不一致（フィルタ等が変更された）
           example: INVALID_ENUM
         message:
           type: string

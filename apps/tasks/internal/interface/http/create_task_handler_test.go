@@ -27,7 +27,7 @@ func TestCreateTaskHandler_Success(t *testing.T) {
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	body := map[string]string{
 		"id":          "task-1",
@@ -94,7 +94,7 @@ func TestCreateTaskHandler_StatusDoingNormalized(t *testing.T) {
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	body := map[string]string{
 		"id":          "task-1",
@@ -149,7 +149,7 @@ func TestCreateTaskHandler_InvalidJSON(t *testing.T) {
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	req := httptest.NewRequest(http.MethodPost, "/tasks", bytes.NewReader([]byte("{invalid")))
 	w := httptest.NewRecorder()
@@ -170,7 +170,7 @@ func TestCreateTaskHandler_ValidationError(t *testing.T) {
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	// title を空にしてバリデーションエラーを引き起こす
 	body := map[string]string{
@@ -243,7 +243,7 @@ func TestListTasksByProjectHandler_Success(t *testing.T) {
 		}
 	}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	req := httptest.NewRequest(http.MethodGet, "/tasks?projectId=proj-1", nil)
 	w := httptest.NewRecorder()
@@ -313,7 +313,7 @@ func TestPatchTaskHandler_Success(t *testing.T) {
 
 	// 更新時は異なる時刻を使用（updatedAt が更新されることを確認するため）
 	updateTime := now.Add(1 * time.Hour)
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime }, []byte("test-secret"))
 
 	// title のみを更新
 	body := map[string]string{
@@ -380,7 +380,7 @@ func TestPatchTaskHandler_AllFieldsNotProvided(t *testing.T) {
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	// 全フィールド未指定
 	body := map[string]interface{}{}
@@ -405,7 +405,7 @@ func TestPatchTaskHandler_TitleEmpty(t *testing.T) {
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	// title が空文字
 	body := map[string]string{
@@ -432,7 +432,7 @@ func TestPatchTaskHandler_TitleWhitespace(t *testing.T) {
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	// title が空白のみ
 	body := map[string]string{
@@ -459,7 +459,7 @@ func TestPatchTaskHandler_TaskNotFound(t *testing.T) {
 	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	body := map[string]string{
 		"title": "updated title",
@@ -504,7 +504,7 @@ func TestPatchTaskHandler_UpdateStatus(t *testing.T) {
 	}
 
 	updateTime := now.Add(1 * time.Hour)
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime }, []byte("test-secret"))
 
 	// status のみを更新
 	body := map[string]string{
@@ -569,7 +569,7 @@ func TestPatchTaskHandler_UpdatePriority(t *testing.T) {
 	}
 
 	updateTime := now.Add(1 * time.Hour)
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime }, []byte("test-secret"))
 
 	// priority のみを更新
 	body := map[string]string{
@@ -633,7 +633,7 @@ func TestPatchTaskHandler_UpdateTitleAndStatus(t *testing.T) {
 	}
 
 	updateTime := now.Add(1 * time.Hour)
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime }, []byte("test-secret"))
 
 	// title と status を同時更新
 	body := map[string]string{
@@ -702,7 +702,7 @@ func TestPatchTaskHandler_UpdateStatusInProgress(t *testing.T) {
 	}
 
 	updateTime := now.Add(1 * time.Hour)
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime }, []byte("test-secret"))
 
 	// status を "in_progress" で更新
 	body := map[string]string{
@@ -766,7 +766,7 @@ func TestPatchTaskHandler_InvalidStatus(t *testing.T) {
 		t.Fatalf("failed to create task: %v", err)
 	}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	// 無効な status
 	body := map[string]string{
@@ -810,7 +810,7 @@ func TestPatchTaskHandler_InvalidPriority(t *testing.T) {
 		t.Fatalf("failed to create task: %v", err)
 	}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	// 無効な priority
 	body := map[string]string{
@@ -855,7 +855,7 @@ func TestPatchTaskHandler_UpdateDescription(t *testing.T) {
 	}
 
 	updateTime := now.Add(1 * time.Hour)
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime }, []byte("test-secret"))
 
 	// description のみを更新
 	body := map[string]string{
@@ -924,7 +924,7 @@ func TestPatchTaskHandler_UpdateDescriptionToNull(t *testing.T) {
 	}
 
 	updateTime := now.Add(1 * time.Hour)
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime }, []byte("test-secret"))
 
 	// description を null で更新（説明を消す）
 	body := map[string]interface{}{
@@ -991,7 +991,7 @@ func TestPatchTaskHandler_UpdateAssigneeID(t *testing.T) {
 	}
 
 	updateTime := now.Add(1 * time.Hour)
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime }, []byte("test-secret"))
 
 	// assigneeId のみを更新
 	validUUID := "12345678-1234-1234-1234-123456789abc"
@@ -1060,7 +1060,7 @@ func TestPatchTaskHandler_UpdateAssigneeIDNull(t *testing.T) {
 
 	// まず assigneeId を設定
 	updateTime1 := now.Add(1 * time.Hour)
-	handler1 := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime1 })
+	handler1 := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime1 }, []byte("test-secret"))
 	body1 := map[string]interface{}{
 		"assigneeId": initialAssigneeID,
 	}
@@ -1074,7 +1074,7 @@ func TestPatchTaskHandler_UpdateAssigneeIDNull(t *testing.T) {
 
 	// 次に assigneeId を null で外す
 	updateTime2 := now.Add(2 * time.Hour)
-	handler2 := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime2 })
+	handler2 := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime2 }, []byte("test-secret"))
 	body2 := map[string]interface{}{
 		"assigneeId": nil,
 	}
@@ -1135,7 +1135,7 @@ func TestPatchTaskHandler_InvalidAssigneeID(t *testing.T) {
 		t.Fatalf("failed to create task: %v", err)
 	}
 
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow)
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, fixedNow, []byte("test-secret"))
 
 	// 無効な UUID 形式
 	body := map[string]string{
@@ -1192,7 +1192,7 @@ func TestPatchTaskHandler_UpdateDueDate(t *testing.T) {
 	}
 
 	updateTime := now.Add(1 * time.Hour)
-	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime })
+	handler := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime }, []byte("test-secret"))
 
 	// dueDate のみを更新
 	body := map[string]interface{}{
@@ -1261,7 +1261,7 @@ func TestPatchTaskHandler_UpdateDueDateToNull(t *testing.T) {
 
 	// まず dueDate を設定
 	updateTime1 := now.Add(1 * time.Hour)
-	handler1 := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime1 })
+	handler1 := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime1 }, []byte("test-secret"))
 	body1 := map[string]interface{}{
 		"dueDate": "2025-01-01T00:00:00Z",
 	}
@@ -1276,7 +1276,7 @@ func TestPatchTaskHandler_UpdateDueDateToNull(t *testing.T) {
 
 	// 次に dueDate を null で外す
 	updateTime2 := now.Add(2 * time.Hour)
-	handler2 := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime2 })
+	handler2 := httpiface.NewTaskHandler(createUC, listUC, updateUC, func() time.Time { return updateTime2 }, []byte("test-secret"))
 	body2 := map[string]interface{}{
 		"dueDate": nil,
 	}

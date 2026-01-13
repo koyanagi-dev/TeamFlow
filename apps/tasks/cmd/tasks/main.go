@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	infra "teamflow-tasks/internal/infrastructure/task"
@@ -25,8 +26,15 @@ func main() {
 		Repo: repo,
 	}
 
+	// cursor secret（環境変数から取得、デフォルトは空）
+	cursorSecret := []byte(os.Getenv("CURSOR_SECRET"))
+	if len(cursorSecret) == 0 {
+		log.Println("WARNING: CURSOR_SECRET is not set, using empty secret (not recommended for production)")
+		cursorSecret = []byte("default-secret-change-in-production")
+	}
+
 	// HTTP ハンドラ（POST /tasks, GET /tasks?projectId=...）
-	taskHandler := httphandler.NewTaskHandler(createUC, listUC, updateUC, time.Now)
+	taskHandler := httphandler.NewTaskHandler(createUC, listUC, updateUC, time.Now, cursorSecret)
 
 	mux := http.NewServeMux()
 	

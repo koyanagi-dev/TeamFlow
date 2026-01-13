@@ -39,10 +39,11 @@ func (o *OptionalString) UnmarshalJSON(data []byte) error {
 // - POST: タスク作成
 // - GET : projectId ごとのタスク一覧取得
 type TaskHandler struct {
-	createUC *usecase.CreateTaskUsecase
-	listUC   *usecase.ListTasksByProjectUsecase
-	updateUC *usecase.UpdateTaskUsecase
-	nowFunc  func() time.Time
+	createUC    *usecase.CreateTaskUsecase
+	listUC      *usecase.ListTasksByProjectUsecase
+	updateUC    *usecase.UpdateTaskUsecase
+	nowFunc     func() time.Time
+	cursorSecret []byte
 }
 
 func NewTaskHandler(
@@ -50,12 +51,14 @@ func NewTaskHandler(
 	listUC *usecase.ListTasksByProjectUsecase,
 	updateUC *usecase.UpdateTaskUsecase,
 	nowFunc func() time.Time,
+	cursorSecret []byte,
 ) http.Handler {
 	return &TaskHandler{
-		createUC: createUC,
-		listUC:   listUC,
-		updateUC: updateUC,
-		nowFunc:  nowFunc,
+		createUC:    createUC,
+		listUC:      listUC,
+		updateUC:    updateUC,
+		nowFunc:     nowFunc,
+		cursorSecret: cursorSecret,
 	}
 }
 
@@ -271,19 +274,16 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		opts = append(opts, domain.WithQueryFilter(queryStr))
 	}
 
-	// sort
-	if sortStr := r.URL.Query().Get("sort"); sortStr != "" {
-		opts = append(opts, domain.WithSort(sortStr))
-	}
-
-	// cursor パラメータが指定された場合は 400 + NOT_IMPLEMENTED を返す
-	if cursor := r.URL.Query().Get("cursor"); cursor != "" {
-		rejected := cursor
+	// cursor と sort の併用チェック（cursor がある場合、sort は指定不可）
+	cursor := r.URL.Query().Get("cursor")
+	sortStr := r.URL.Query().Get("sort")
+	if cursor != "" && sortStr != "" {
+		rejected := sortStr
 		issue := ValidationIssue{
 			Location:      "query",
-			Field:         "cursor",
-			Code:          "NOT_IMPLEMENTED",
-			Message:       "cursor-based pagination は現在開発中です。limit のみご利用ください。",
+			Field:         "sort",
+			Code:          "INCOMPATIBLE_WITH_CURSOR",
+			Message:       "cursor を使用する場合、sort は指定できません。",
 			RejectedValue: &rejected,
 		}
 		resp := NewValidationErrorResponse(issue)
@@ -291,6 +291,16 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(resp)
 		return
+	}
+
+	// sort（cursor がない場合のみ）
+	if sortStr != "" {
+		opts = append(opts, domain.WithSort(sortStr))
+	}
+
+	// cursor（cursor がある場合）
+	if cursor != "" {
+		opts = append(opts, domain.WithCursor(cursor, projectID, h.cursorSecret, h.nowFunc()))
 	}
 
 	// limit の default=200 を HTTP 層で明示
@@ -341,7 +351,7 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// レスポンス形式: { "tasks": [...], "page": null } (OpenAPI仕様に準拠)
+	// レスポンス形式: { "tasks": [...], "page": {...} } (OpenAPI仕様に準拠)
 	type pageInfo struct {
 		NextCursor *string `json:"nextCursor,omitempty"`
 		Limit      int     `json:"limit,omitempty"`
@@ -368,12 +378,44 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		})
 	}
 
-	// page は現時点では省略（cursor実装後に返す）
+	// nextCursor の計算
+	var nextCursor *string
+	// cursor がある場合、repository 層で limit + 1 件取得している
+	// limit + 1 件取得できた場合、limit 件目を使って nextCursor を生成し、limit 件だけ返す
+	if query.Cursor != nil && len(tasks) > query.Limit {
+		// limit 件目（インデックス query.Limit-1）を使って nextCursor を生成
+		lastTask := tasks[query.Limit-1]
+		payload := domain.CursorPayload{
+			V:         1,
+			CreatedAt: domain.FormatCursorCreatedAt(lastTask.CreatedAt),
+			ID:        lastTask.ID,
+			ProjectID: projectID,
+			QHash:     query.ComputeQHash(projectID),
+			IssuedAt:  h.nowFunc().Unix(),
+		}
+		cursor, err := domain.EncodeCursor(payload, h.cursorSecret)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		nextCursor = &cursor
+		// レスポンスから limit + 1 件目を除外（limit 件だけ返す）
+		responses = responses[:query.Limit]
+	}
+	// cursor がない場合は nextCursor は null（v1 では cursor がない場合の nextCursor 生成は省略）
+
+	// page を返す
+	page := &pageInfo{
+		NextCursor: nextCursor,
+		Limit:      query.Limit,
+	}
+
 	// 検索結果が 0 件でも 200 + tasks: [] を返す
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(listTasksResponse{
 		Tasks: responses,
+		Page:  page,
 	})
 }
 
