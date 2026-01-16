@@ -193,11 +193,8 @@ func (r *SQLTaskRepository) buildQuery(projectID string, query *domain.TaskQuery
 	}
 
 	// LIMIT句（nextCursor 判定のため limit + 1 件取得）
-	limitValue := query.Limit
-	if query.Cursor != nil {
-		// cursor がある場合は limit + 1 件取得して nextCursor 判定
-		limitValue = query.Limit + 1
-	}
+	// 1ページ目（cursor が nil）でも limit + 1 件取得して nextCursor 判定を行う
+	limitValue := query.Limit + 1
 	limitClause := fmt.Sprintf("LIMIT $%d", argIndex)
 	args = append(args, limitValue)
 
