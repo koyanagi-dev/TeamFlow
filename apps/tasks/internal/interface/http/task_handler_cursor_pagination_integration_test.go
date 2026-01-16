@@ -38,13 +38,15 @@ func TestTaskHandler_CursorPagination_FirstPageReturnsNextCursor(t *testing.T) {
 
 	// Seed: 5件以上、limit=2で複数ページになる数
 	// createdAt が同一の行を最低2件含める（tie-breaker: id）
+	// テスト間でIDが重複しないように、一意のIDを使用
+	testID := "first-page-next-cursor"
 	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
 	testutil.InsertTasks(t, db, []testutil.SeedTask{
-		{ID: "task-001", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: base.Add(1 * time.Microsecond), UpdatedAt: base.Add(1 * time.Microsecond)},
-		{ID: "task-002", ProjectID: "proj-1", Title: "T2", Status: "todo", Priority: "medium", CreatedAt: base.Add(2 * time.Microsecond), UpdatedAt: base.Add(2 * time.Microsecond)},
-		{ID: "task-003", ProjectID: "proj-1", Title: "T3", Status: "todo", Priority: "low", CreatedAt: base, UpdatedAt: base}, // 同じcreatedAt
-		{ID: "task-004", ProjectID: "proj-1", Title: "T4", Status: "todo", Priority: "high", CreatedAt: base, UpdatedAt: base}, // 同じcreatedAt
-		{ID: "task-005", ProjectID: "proj-1", Title: "T5", Status: "todo", Priority: "medium", CreatedAt: base.Add(3 * time.Microsecond), UpdatedAt: base.Add(3 * time.Microsecond)},
+		{ID: testID + "-001", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: base.Add(1 * time.Microsecond), UpdatedAt: base.Add(1 * time.Microsecond)},
+		{ID: testID + "-002", ProjectID: "proj-1", Title: "T2", Status: "todo", Priority: "medium", CreatedAt: base.Add(2 * time.Microsecond), UpdatedAt: base.Add(2 * time.Microsecond)},
+		{ID: testID + "-003", ProjectID: "proj-1", Title: "T3", Status: "todo", Priority: "low", CreatedAt: base, UpdatedAt: base}, // 同じcreatedAt
+		{ID: testID + "-004", ProjectID: "proj-1", Title: "T4", Status: "todo", Priority: "high", CreatedAt: base, UpdatedAt: base}, // 同じcreatedAt
+		{ID: testID + "-005", ProjectID: "proj-1", Title: "T5", Status: "todo", Priority: "medium", CreatedAt: base.Add(3 * time.Microsecond), UpdatedAt: base.Add(3 * time.Microsecond)},
 	})
 
 	// 1ページ目: GET /api/projects/{projectId}/tasks?limit=2
@@ -118,6 +120,12 @@ func TestTaskHandler_CursorPagination_FirstPageReturnsNextCursor(t *testing.T) {
 
 		nextCursor = resp.Page.NextCursor
 		pageNum++
+		
+		// 無限ループ防止（最大10ページまで）
+		if pageNum > 10 {
+			t.Fatalf("too many pages, possible infinite loop")
+			break
+		}
 	}
 
 	// 検証: 取得したタスクの ID が重複なし
@@ -126,7 +134,7 @@ func TestTaskHandler_CursorPagination_FirstPageReturnsNextCursor(t *testing.T) {
 	}
 
 	// 検証: 欠落なし（seedした全件が回収できる）
-	expectedIDs := []string{"task-001", "task-002", "task-003", "task-004", "task-005"}
+	expectedIDs := []string{testID + "-001", testID + "-002", testID + "-003", testID + "-004", testID + "-005"}
 	for _, expectedID := range expectedIDs {
 		if !allTaskIDs[expectedID] {
 			t.Errorf("expected task ID %s not found", expectedID)
@@ -260,14 +268,18 @@ func TestTaskHandler_CursorPagination_Error_INVALID_SIGNATURE(t *testing.T) {
 	cursorSecret := []byte("test-secret")
 	handler := NewTaskHandler(createUC, listUC, updateUC, nowFunc, cursorSecret)
 
-	// 正しい cursor を生成
+	// 正しい cursor を生成（qhash を計算するために query を作成）
 	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+	query, err := domain.NewTaskQuery(domain.WithLimit(2))
+	if err != nil {
+		t.Fatalf("failed to create query: %v", err)
+	}
 	payload := domain.CursorPayload{
 		V:         1,
 		CreatedAt: domain.FormatCursorCreatedAt(base),
 		ID:        "task-001",
 		ProjectID: "proj-1",
-		QHash:     "test-hash",
+		QHash:     query.ComputeQHash("proj-1"),
 		IssuedAt:  time.Now().Unix(),
 	}
 	validCursor, err := domain.EncodeCursor(payload, cursorSecret)
