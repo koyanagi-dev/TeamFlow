@@ -380,9 +380,9 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 
 	// nextCursor の計算
 	var nextCursor *string
-	// cursor がある場合、repository 層で limit + 1 件取得している
+	// repository 層で limit + 1 件取得している
 	// limit + 1 件取得できた場合、limit 件目を使って nextCursor を生成し、limit 件だけ返す
-	if query.Cursor != nil && len(tasks) > query.Limit {
+	if len(tasks) > query.Limit {
 		// limit 件目（インデックス query.Limit-1）を使って nextCursor を生成
 		lastTask := tasks[query.Limit-1]
 		payload := domain.CursorPayload{
@@ -402,7 +402,6 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 		// レスポンスから limit + 1 件目を除外（limit 件だけ返す）
 		responses = responses[:query.Limit]
 	}
-	// cursor がない場合は nextCursor は null（v1 では cursor がない場合の nextCursor 生成は省略）
 
 	// page を返す
 	page := &pageInfo{

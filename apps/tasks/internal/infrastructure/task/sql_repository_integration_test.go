@@ -12,69 +12,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	domain "teamflow-tasks/internal/domain/task"
+	"teamflow-tasks/internal/testutil"
 )
 
 // testPool is initialized in integration_test.go (TestMain).
 // We keep it in this package scope so integration tests can share a single DB pool.
 var testPool *pgxpool.Pool
-
-// setupTestDB returns the integration-test pool.
-// It fails fast if TestMain didn't initialize the pool.
-func setupTestDB(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	if testPool == nil {
-		t.Fatalf("testPool is nil: ensure TestMain initialized it (go test -tags=integration ./... with DB_TEST_DSN)")
-	}
-	return testPool
-}
-
-func resetTasksTable(t *testing.T, db *pgxpool.Pool) {
-	t.Helper()
-	ctx := context.Background()
-	_, err := db.Exec(ctx, "TRUNCATE TABLE tasks")
-	if err != nil {
-		t.Fatalf("failed to truncate tasks: %v", err)
-	}
-}
-
-type seedTask struct {
-	ID         string
-	ProjectID  string
-	Title      string
-	Desc       *string
-	Status     string
-	Priority   string
-	AssigneeID *string
-	DueDate    *time.Time // DATE in DB: pass time at midnight; nil for NULL
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-}
-
-func insertTasks(t *testing.T, db *pgxpool.Pool, tasks []seedTask) {
-	t.Helper()
-	ctx := context.Background()
-
-	const q = `
-		INSERT INTO tasks (
-			id, project_id, title, description, status, priority, assignee_id, due_date, created_at, updated_at
-		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10
-		)
-	`
-	for _, tt := range tasks {
-		_, err := db.Exec(ctx, q,
-			tt.ID, tt.ProjectID, tt.Title, tt.Desc, tt.Status, tt.Priority, tt.AssigneeID, tt.DueDate, tt.CreatedAt, tt.UpdatedAt,
-		)
-		if err != nil {
-			t.Fatalf("failed to insert seed task id=%s: %v", tt.ID, err)
-		}
-	}
-}
-
-// helper to build a DATE (no time precision required; we care about NULL ordering / filtering)
-func dateYMD(y int, m time.Month, d int) time.Time {
-	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
-}
 
 // taskIDSet は task ID の集合を表す（順序に依存しない比較用）
 func taskIDSet(tasks []*domain.Task) map[string]struct{} {
@@ -127,13 +70,13 @@ func getTaskIDs(tasks []*domain.Task) []string {
 
 // TestSQLTaskRepository_FindByProjectID_SortByPriority はpriorityソートを検証する。
 func TestSQLTaskRepository_FindByProjectID_SortByPriority(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "task-high", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: now.Add(-3 * time.Hour), UpdatedAt: now.Add(-3 * time.Hour)},
 		{ID: "task-medium", ProjectID: "proj-1", Title: "T2", Status: "todo", Priority: "medium", CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
 		{ID: "task-low", ProjectID: "proj-1", Title: "T3", Status: "todo", Priority: "low", CreatedAt: now.Add(-1 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
@@ -168,15 +111,15 @@ func TestSQLTaskRepository_FindByProjectID_SortByPriority(t *testing.T) {
 
 // TestSQLTaskRepository_FindByProjectID_SortByDueDate_NullHandling はdueDateのnull順を検証する。
 func TestSQLTaskRepository_FindByProjectID_SortByDueDate_NullHandling(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
-	d1 := dateYMD(2026, 1, 10)
-	d2 := dateYMD(2026, 1, 20)
+	d1 := testutil.DateYMD(2026, 1, 10)
+	d2 := testutil.DateYMD(2026, 1, 20)
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "task-null", ProjectID: "proj-1", Title: "NULL due", Status: "todo", Priority: "medium", DueDate: nil, CreatedAt: now.Add(-3 * time.Hour), UpdatedAt: now.Add(-3 * time.Hour)},
 		{ID: "task-d1", ProjectID: "proj-1", Title: "due 1", Status: "todo", Priority: "medium", DueDate: &d1, CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
 		{ID: "task-d2", ProjectID: "proj-1", Title: "due 2", Status: "todo", Priority: "medium", DueDate: &d2, CreatedAt: now.Add(-1 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
@@ -219,13 +162,13 @@ func TestSQLTaskRepository_FindByProjectID_SortByDueDate_NullHandling(t *testing
 
 // TestSQLTaskRepository_FindByProjectID_SortByCreatedAt はcreatedAtソートを検証する。
 func TestSQLTaskRepository_FindByProjectID_SortByCreatedAt(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	base := time.Now().UTC().Add(-10 * time.Minute)
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "task-1", ProjectID: "proj-1", Title: "old", Status: "todo", Priority: "low", CreatedAt: base.Add(-2 * time.Minute), UpdatedAt: base.Add(-2 * time.Minute)},
 		{ID: "task-2", ProjectID: "proj-1", Title: "mid", Status: "todo", Priority: "low", CreatedAt: base.Add(-1 * time.Minute), UpdatedAt: base.Add(-1 * time.Minute)},
 		{ID: "task-3", ProjectID: "proj-1", Title: "new", Status: "todo", Priority: "low", CreatedAt: base, UpdatedAt: base},
@@ -251,14 +194,14 @@ func TestSQLTaskRepository_FindByProjectID_SortByCreatedAt(t *testing.T) {
 
 // TestSQLTaskRepository_FindByProjectID_MultipleSortKeys は複数ソートキーを検証する。
 func TestSQLTaskRepository_FindByProjectID_MultipleSortKeys(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	base := time.Now().UTC().Add(-1 * time.Hour)
 
 	// 同 priority の中で createdAt で並ぶことを確認する（-priority,createdAt）
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "task-a", ProjectID: "proj-1", Title: "A", Status: "todo", Priority: "high", CreatedAt: base.Add(10 * time.Minute), UpdatedAt: base.Add(10 * time.Minute)},
 		{ID: "task-b", ProjectID: "proj-1", Title: "B", Status: "todo", Priority: "high", CreatedAt: base.Add(0 * time.Minute), UpdatedAt: base.Add(0 * time.Minute)},
 		{ID: "task-c", ProjectID: "proj-1", Title: "C", Status: "todo", Priority: "medium", CreatedAt: base.Add(5 * time.Minute), UpdatedAt: base.Add(5 * time.Minute)},
@@ -293,15 +236,15 @@ func TestSQLTaskRepository_FindByProjectID_MultipleSortKeys(t *testing.T) {
 
 // TestSQLTaskRepository_FindByProjectID_Filter_Status_Single は単一 status フィルタを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_Status_Single(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 	user2 := "user-2"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		// proj-1: todo, in_progress, done を混在
 		{ID: "proj1-todo", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-inprogress", ProjectID: "proj-1", Title: "beta", Status: "in_progress", Priority: "medium", AssigneeID: &user2, CreatedAt: now, UpdatedAt: now},
@@ -328,14 +271,14 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Status_Single(t *testing.T) {
 
 // TestSQLTaskRepository_FindByProjectID_Filter_Status_Multiple は複数 status フィルタを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_Status_Multiple(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-todo", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-inprogress", ProjectID: "proj-1", Title: "beta", Status: "in_progress", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-done", ProjectID: "proj-1", Title: "gamma", Status: "done", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -377,14 +320,14 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Status_InvalidValue(t *testing
 
 // TestSQLTaskRepository_FindByProjectID_Filter_Priority_Single は単一 priority フィルタを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_Priority_Single(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-high", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-medium", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-low", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -407,14 +350,14 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Priority_Single(t *testing.T) 
 
 // TestSQLTaskRepository_FindByProjectID_Filter_Priority_Multiple は複数 priority フィルタを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_Priority_Multiple(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-high", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-medium", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-low", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -455,15 +398,15 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Priority_InvalidValue(t *testi
 
 // TestSQLTaskRepository_FindByProjectID_Filter_AssigneeID は assigneeId フィルタを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_AssigneeID(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 	user2 := "user-2"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-user1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-user2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: &user2, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-null", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
@@ -486,15 +429,15 @@ func TestSQLTaskRepository_FindByProjectID_Filter_AssigneeID(t *testing.T) {
 
 // TestSQLTaskRepository_FindByProjectID_Filter_AssigneeID_NilOrEmptyIgnored は nil/empty assigneeId が無視されることを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_AssigneeID_NilOrEmptyIgnored(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 	user2 := "user-2"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-user1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-user2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: &user2, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-null", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
@@ -536,15 +479,15 @@ func TestSQLTaskRepository_FindByProjectID_Filter_AssigneeID_NilOrEmptyIgnored(t
 
 // TestSQLTaskRepository_FindByProjectID_Filter_Combined は複合フィルタを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_Combined(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 	user2 := "user-2"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		// proj-1: 条件に合うもの
 		{ID: "proj1-match", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-done-high-user1", ProjectID: "proj-1", Title: "beta", Status: "done", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -578,15 +521,15 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Combined(t *testing.T) {
 
 // TestSQLTaskRepository_FindByProjectID_Filter_NoHit は 0 件になるケースを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_NoHit(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 	user2 := "user-2"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-todo-medium-user1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "medium", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-done-low-user2", ProjectID: "proj-1", Title: "beta", Status: "done", Priority: "low", AssigneeID: &user2, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj2-todo-high-user1", ProjectID: "proj-2", Title: "gamma", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -620,14 +563,14 @@ func TestSQLTaskRepository_FindByProjectID_Filter_NoHit(t *testing.T) {
 
 // TestSQLTaskRepository_FindByProjectID_Search_Title_Partial は title の部分一致検索を検証する。
 func TestSQLTaskRepository_FindByProjectID_Search_Title_Partial(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-alpha", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-ALPHA", ProjectID: "proj-1", Title: "ALPHA", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-beta", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -651,14 +594,14 @@ func TestSQLTaskRepository_FindByProjectID_Search_Title_Partial(t *testing.T) {
 
 // TestSQLTaskRepository_FindByProjectID_Search_MinLength_1 は最小長 1 の検索を検証する。
 func TestSQLTaskRepository_FindByProjectID_Search_MinLength_1(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-alpha", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-beta", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj2-alpha", ProjectID: "proj-2", Title: "alpha", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -682,14 +625,14 @@ func TestSQLTaskRepository_FindByProjectID_Search_MinLength_1(t *testing.T) {
 
 // TestSQLTaskRepository_FindByProjectID_Search_ScopedToProject は検索が project スコープ内に限定されることを検証する。
 func TestSQLTaskRepository_FindByProjectID_Search_ScopedToProject(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-other", ProjectID: "proj-1", Title: "other", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj2-alpha", ProjectID: "proj-2", Title: "alpha", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj2-alpha2", ProjectID: "proj-2", Title: "alpha task", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -714,14 +657,14 @@ func TestSQLTaskRepository_FindByProjectID_Search_ScopedToProject(t *testing.T) 
 
 // TestSQLTaskRepository_FindByProjectID_Search_SpecialCharacters は特殊文字を含むタイトルの検索を検証する。
 func TestSQLTaskRepository_FindByProjectID_Search_SpecialCharacters(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-special1", ProjectID: "proj-1", Title: "x'y", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-special2", ProjectID: "proj-1", Title: "100% legit", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj2-special", ProjectID: "proj-2", Title: "x'y", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -763,15 +706,15 @@ func TestSQLTaskRepository_FindByProjectID_Search_SpecialCharacters(t *testing.T
 // TestSQLTaskRepository_FindByProjectID_Limit_1 は limit=1 を検証する。
 // sort を付与して決定的にする（createdAt,asc で最古のタスクが返ることを期待）。
 func TestSQLTaskRepository_FindByProjectID_Limit_1(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	base := time.Now().UTC()
 	user1 := "user-1"
 
 	// createdAt を 3件で差が出るようにする（now, now+1s, now+2s）
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: base, UpdatedAt: base},
 		{ID: "proj1-2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: base.Add(1 * time.Second), UpdatedAt: base.Add(1 * time.Second)},
 		{ID: "proj1-3", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: base.Add(2 * time.Second), UpdatedAt: base.Add(2 * time.Second)},
@@ -789,25 +732,26 @@ func TestSQLTaskRepository_FindByProjectID_Limit_1(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// limit=1 で必ず 1件
-	if len(tasks) != 1 {
-		t.Errorf("expected 1 task, got %d: %v", len(tasks), getTaskIDs(tasks))
+	// repository層は limit + 1 件取得する（nextCursor判定のため）
+	// limit=1 の場合は 2件取得される
+	if len(tasks) != 2 {
+		t.Errorf("expected 2 tasks (limit + 1), got %d: %v", len(tasks), getTaskIDs(tasks))
 	}
-	// createdAt,asc で最古のタスク（proj1-1）が返ることを期待
-	assertTaskIDs(t, tasks, []string{"proj1-1"})
+	// createdAt,asc で最古のタスク（proj1-1）が返ることを期待（最初の limit 件だけをチェック）
+	assertTaskIDs(t, tasks[:1], []string{"proj1-1"})
 	assertNoProjectLeakage(t, tasks, "proj-1")
 }
 
 // TestSQLTaskRepository_FindByProjectID_Limit_ExactCount は limit=seed数 を検証する。
 func TestSQLTaskRepository_FindByProjectID_Limit_ExactCount(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-2", ProjectID: "proj-1", Title: "beta", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-3", ProjectID: "proj-1", Title: "gamma", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -864,14 +808,14 @@ func TestSQLTaskRepository_FindByProjectID_Limit_Negative_ShouldError(t *testing
 
 // TestSQLTaskRepository_FindByProjectID_Security_SQLi_InQuery_DoesNotBypassFilters は SQLi がフィルタをバイパスしないことを検証する。
 func TestSQLTaskRepository_FindByProjectID_Security_SQLi_InQuery_DoesNotBypassFilters(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-normal", ProjectID: "proj-1", Title: "normal task", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-inject", ProjectID: "proj-1", Title: "100% legit", Status: "todo", Priority: "medium", AssigneeID: nil, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj1-special", ProjectID: "proj-1", Title: "x'y", Status: "todo", Priority: "low", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
@@ -901,14 +845,14 @@ func TestSQLTaskRepository_FindByProjectID_Security_SQLi_InQuery_DoesNotBypassFi
 
 // TestSQLTaskRepository_FindByProjectID_Security_SQLi_InAssigneeID_DoesNotBypass は assigneeId での SQLi がバイパスしないことを検証する。
 func TestSQLTaskRepository_FindByProjectID_Security_SQLi_InAssigneeID_DoesNotBypass(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	now := time.Now().UTC()
 	user1 := "user-1"
 
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "proj1-user1", ProjectID: "proj-1", Title: "alpha", Status: "todo", Priority: "high", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 		{ID: "proj2-secret", ProjectID: "proj-2", Title: "secret", Status: "todo", Priority: "medium", AssigneeID: &user1, CreatedAt: now, UpdatedAt: now},
 	})
@@ -959,15 +903,15 @@ func TestSQLTaskRepository_FindByProjectID_Security_SortKeyInjection_Ignored(t *
 // - 1ページ目と2ページ目に重複がない
 // - 合計が期待件数と一致（欠落なし）
 func TestSQLTaskRepository_FindByProjectID_CursorPagination_Normal(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
 	secret := []byte("test-secret-key")
 
 	// 5件のタスクを作成（micro秒単位で差をつける）
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "task-001", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: base.Add(1 * time.Microsecond), UpdatedAt: base.Add(1 * time.Microsecond)},
 		{ID: "task-002", ProjectID: "proj-1", Title: "T2", Status: "todo", Priority: "medium", CreatedAt: base.Add(2 * time.Microsecond), UpdatedAt: base.Add(2 * time.Microsecond)},
 		{ID: "task-003", ProjectID: "proj-1", Title: "T3", Status: "todo", Priority: "low", CreatedAt: base.Add(3 * time.Microsecond), UpdatedAt: base.Add(3 * time.Microsecond)},
@@ -986,12 +930,13 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_Normal(t *testing.T)
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(tasks1) != 2 {
-		t.Fatalf("expected 2 tasks, got %d", len(tasks1))
+	// repository層は limit + 1 件取得する（nextCursor判定のため）
+	if len(tasks1) != 3 {
+		t.Fatalf("expected 3 tasks (limit + 1), got %d", len(tasks1))
 	}
 
-	// nextCursor を生成
-	lastTask1 := tasks1[len(tasks1)-1]
+	// nextCursor を生成（limit 件目を使う）
+	lastTask1 := tasks1[query1.Limit-1]
 	payload1 := domain.CursorPayload{
 		V:         1,
 		CreatedAt: domain.FormatCursorCreatedAt(lastTask1.CreatedAt),
@@ -1019,13 +964,22 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_Normal(t *testing.T)
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(tasks2) != 2 {
-		t.Fatalf("expected 2 tasks, got %d", len(tasks2))
+	// repository層は limit + 1 件取得する（nextCursor判定のため）
+	if len(tasks2) != 3 {
+		t.Fatalf("expected 3 tasks (limit + 1), got %d", len(tasks2))
 	}
 
-	// 重複チェック
-	taskIDs1 := getTaskIDs(tasks1)
-	taskIDs2 := getTaskIDs(tasks2)
+	// 重複チェック（repository層は limit + 1 件取得するので、最初の limit 件だけをチェック）
+	limit1 := query1.Limit
+	if limit1 > len(tasks1) {
+		limit1 = len(tasks1)
+	}
+	limit2 := query2.Limit
+	if limit2 > len(tasks2) {
+		limit2 = len(tasks2)
+	}
+	taskIDs1 := getTaskIDs(tasks1[:limit1])
+	taskIDs2 := getTaskIDs(tasks2[:limit2])
 	for _, id1 := range taskIDs1 {
 		for _, id2 := range taskIDs2 {
 			if id1 == id2 {
@@ -1035,31 +989,33 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_Normal(t *testing.T)
 	}
 
 	// 合計件数チェック（5件すべて取得できているか）
+	// repository層は limit + 1 件取得するので、1ページ目で3件、2ページ目で2件取得される
 	allIDs := append(taskIDs1, taskIDs2...)
 	if len(allIDs) != 4 {
 		t.Errorf("expected 4 tasks total (2+2), got %d", len(allIDs))
 	}
 
 	// 順序チェック（createdAt ASC, id ASC）
+	// repository層は limit + 1 件取得するので、最初の limit 件だけをチェック
 	if tasks1[0].ID != "task-001" || tasks1[1].ID != "task-002" {
-		t.Errorf("unexpected order for page 1: got %v", taskIDs1)
+		t.Errorf("unexpected order for page 1: got %v", getTaskIDs(tasks1[:limit1]))
 	}
-	if tasks2[0].ID != "task-003" || tasks2[1].ID != "task-004" {
-		t.Errorf("unexpected order for page 2: got %v", taskIDs2)
+	if len(tasks2) >= 2 && (tasks2[0].ID != "task-003" || tasks2[1].ID != "task-004") {
+		t.Errorf("unexpected order for page 2: got %v", getTaskIDs(tasks2[:limit2]))
 	}
 }
 
 // TestSQLTaskRepository_FindByProjectID_CursorPagination_TieBreaker は tie-breaker（createdAt同値でid順）を検証する。
 func TestSQLTaskRepository_FindByProjectID_CursorPagination_TieBreaker(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
 	secret := []byte("test-secret-key")
 
 	// 同じ createdAt のタスクを複数作成（id で順序が決まる）
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "task-aaa", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: base, UpdatedAt: base},
 		{ID: "task-bbb", ProjectID: "proj-1", Title: "T2", Status: "todo", Priority: "medium", CreatedAt: base, UpdatedAt: base},
 		{ID: "task-ccc", ProjectID: "proj-1", Title: "T3", Status: "todo", Priority: "low", CreatedAt: base, UpdatedAt: base},
@@ -1076,17 +1032,18 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_TieBreaker(t *testin
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(tasks1) != 2 {
-		t.Fatalf("expected 2 tasks, got %d", len(tasks1))
+	// repository層は limit + 1 件取得する（nextCursor判定のため）
+	if len(tasks1) != 3 {
+		t.Fatalf("expected 3 tasks (limit + 1), got %d", len(tasks1))
 	}
 
-	// id 順で並んでいることを確認
+	// id 順で並んでいることを確認（最初の limit 件だけをチェック）
 	if tasks1[0].ID != "task-aaa" || tasks1[1].ID != "task-bbb" {
 		t.Errorf("unexpected order: got %v, expected [task-aaa, task-bbb]", getTaskIDs(tasks1))
 	}
 
-	// nextCursor を生成
-	lastTask1 := tasks1[len(tasks1)-1]
+	// nextCursor を生成（limit 件目を使う）
+	lastTask1 := tasks1[query1.Limit-1]
 	payload1 := domain.CursorPayload{
 		V:         1,
 		CreatedAt: domain.FormatCursorCreatedAt(lastTask1.CreatedAt),
@@ -1114,6 +1071,8 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_TieBreaker(t *testin
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	// repository層は limit + 1 件取得する（nextCursor判定のため）
+	// 残りが1件しかないので、limit + 1 = 3件取得できるが、実際には1件しかない
 	if len(tasks2) != 1 {
 		t.Fatalf("expected 1 task, got %d", len(tasks2))
 	}
@@ -1143,16 +1102,24 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_CursorWithSort
 		t.Fatalf("failed to encode cursor: %v", err)
 	}
 
-	// cursor + sort を指定すると Validate() でエラーになる
+	// cursor + sort を指定すると NewTaskQuery または Validate() でエラーになる
+	// WithCursor 内で qhash 検証が行われるため、sort を追加すると qhash が一致せず NewTaskQuery でエラーになる可能性がある
+	// または、Validate() でエラーになる
 	query, err := domain.NewTaskQuery(
 		domain.WithLimit(2),
 		domain.WithCursor(cursor, "proj-1", secret, time.Now()),
 		domain.WithSort("priority"),
 	)
 	if err != nil {
+		// NewTaskQuery でエラーになった場合（qhash不一致など）
+		if strings.Contains(err.Error(), "cursor query mismatch") {
+			// これは期待される動作（sort を追加すると qhash が変わるため）
+			return
+		}
 		t.Fatalf("unexpected error in NewTaskQuery: %v", err)
 	}
 
+	// NewTaskQuery が成功した場合は Validate() でエラーになる
 	err = query.Validate()
 	if err == nil {
 		t.Fatalf("expected error for cursor + sort, but got nil")
@@ -1266,15 +1233,15 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_Expired(t *tes
 
 // TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_QueryMismatch は qhash 不一致エラーを検証する。
 func TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_QueryMismatch(t *testing.T) {
-	db := setupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	repo := NewSQLTaskRepository(db)
-	resetTasksTable(t, db)
+	testutil.ResetTasksTable(t, db)
 
 	secret := []byte("test-secret-key")
 	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
 
 	// タスクを作成
-	insertTasks(t, db, []seedTask{
+	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: "task-001", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: base, UpdatedAt: base},
 	})
 
@@ -1304,7 +1271,7 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_QueryMismatch(
 	}
 
 	// フィルタを追加して cursor を再利用（qhash 不一致）
-	query2, err := domain.NewTaskQuery(
+	_, err = domain.NewTaskQuery(
 		domain.WithLimit(2),
 		domain.WithStatusFilter("done"), // フィルタを追加
 		domain.WithCursor(cursor1, "proj-1", secret, time.Now()),
@@ -1318,7 +1285,7 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_Error_QueryMismatch(
 	}
 
 	// projectID 不一致も検証
-	query3, err := domain.NewTaskQuery(
+	_, err = domain.NewTaskQuery(
 		domain.WithLimit(2),
 		domain.WithCursor(cursor1, "proj-2", secret, time.Now()), // 異なる projectID
 	)
