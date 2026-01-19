@@ -19,14 +19,6 @@ import (
 // We keep it in this package scope so integration tests can share a single DB pool.
 var testPool *pgxpool.Pool
 
-// min は2つの整数の最小値を返す
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // clipToLimit は tasks を limit 件に切り詰める（repository層は limit+1 件返すため）
 func clipToLimit(tasks []*domain.Task, limit int) []*domain.Task {
 	if len(tasks) <= limit {
@@ -982,18 +974,15 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_Normal(t *testing.T)
 	}
 
 	// repository層は limit + 1 件取得する（nextCursor判定のため）
-	// 実際に存在する件数が limit+1 より少ない場合は、存在する件数だけ返る
-	if len(tasks2) < query2.Limit {
-		// 残りが limit 未満の場合は、全件取得できている
-		if len(tasks2) < 2 {
-			t.Fatalf("expected at least 2 tasks, got %d", len(tasks2))
-		}
-	} else if len(tasks2) != query2.Limit+1 {
-		t.Fatalf("expected %d or %d tasks (limit or limit+1), got %d", query2.Limit, query2.Limit+1, len(tasks2))
+	if len(tasks2) == 0 {
+		t.Fatalf("expected non-empty tasks2")
 	}
+	if len(tasks2) > query2.Limit+1 {
+		t.Fatalf("expected at most %d tasks, got %d", query2.Limit+1, len(tasks2))
+	}
+	got2 := clipToLimit(tasks2, query2.Limit)
 
 	// 重複チェック（repository層は limit + 1 件取得するので、最初の limit 件だけをチェック）
-	got2 := clipToLimit(tasks2, query2.Limit)
 	taskIDs1 := getTaskIDs(got1)
 	taskIDs2 := getTaskIDs(got2)
 	for _, id1 := range taskIDs1 {
@@ -1096,21 +1085,11 @@ func TestSQLTaskRepository_FindByProjectID_CursorPagination_TieBreaker(t *testin
 
 	// 順序が崩れていないことを確認（limit 件だけをチェック）
 	got2 := clipToLimit(tasks2, query2.Limit)
-	// 残りが1件しかないので、1件だけ返ってくるはず
-	// ただし、他のテストのデータが混入している可能性があるため、task-cccが含まれていることを確認
-	foundCCC := false
-	for _, task := range got2 {
-		if task.ID == "task-ccc" {
-			foundCCC = true
-			break
-		}
+	if len(got2) != 1 {
+		t.Fatalf("expected 1 task remaining, got %d: %v", len(got2), getTaskIDs(got2))
 	}
-	if !foundCCC {
-		t.Errorf("expected task-ccc in results, got %v", getTaskIDs(got2))
-	}
-	// task-cccが最初に来ることを確認（createdAtが同じなのでid順）
-	if len(got2) > 0 && got2[0].ID != "task-ccc" {
-		t.Errorf("expected task-ccc to be first, got %v", getTaskIDs(got2))
+	if got2[0].ID != "task-ccc" {
+		t.Fatalf("expected [task-ccc], got %v", getTaskIDs(got2))
 	}
 }
 

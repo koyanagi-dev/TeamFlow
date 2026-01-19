@@ -124,7 +124,6 @@ func TestTaskHandler_CursorPagination_FirstPageReturnsNextCursor(t *testing.T) {
 		// 無限ループ防止（最大10ページまで）
 		if pageNum > 10 {
 			t.Fatalf("too many pages, possible infinite loop")
-			break
 		}
 	}
 

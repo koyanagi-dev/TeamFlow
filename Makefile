@@ -60,4 +60,4 @@ test-integration:
 	$(MAKE) db-test-up; \
 	cd apps/tasks && \
 	DB_TEST_DSN="postgres://teamflow:teamflow@localhost:15432/teamflow_tasks_test?sslmode=disable" \
-	go test -tags=integration ./... -count=1
+	go test -tags=integration ./... -count=1 -p 1
