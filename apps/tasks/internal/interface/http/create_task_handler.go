@@ -381,7 +381,8 @@ func (h *TaskHandler) handleListByProjectWithQuery(w http.ResponseWriter, r *htt
 	// nextCursor の計算
 	var nextCursor *string
 	// repository 層で limit + 1 件取得している
-	// limit + 1 件取得できた場合、limit 件目を使って nextCursor を生成し、limit 件だけ返す
+	// limit + 1 件取得できた場合（次ページが存在する場合）、limit 件目を使って nextCursor を生成し、limit 件だけ返す
+	// 1ページ目（cursor なし）でも次ページがあれば nextCursor を返す
 	if len(tasks) > query.Limit {
 		// limit 件目（インデックス query.Limit-1）を使って nextCursor を生成
 		lastTask := tasks[query.Limit-1]
