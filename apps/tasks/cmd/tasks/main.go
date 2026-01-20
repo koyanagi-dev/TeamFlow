@@ -26,11 +26,13 @@ func main() {
 		Repo: repo,
 	}
 
-	// cursor secret（環境変数から取得、デフォルトは空）
-	cursorSecret := []byte(os.Getenv("CURSOR_SECRET"))
-	if len(cursorSecret) == 0 {
-		log.Println("WARNING: CURSOR_SECRET is not set, using empty secret (not recommended for production)")
-		cursorSecret = []byte("default-secret-change-in-production")
+	// cursor secret（環境変数から取得、環境に応じて検証）
+	appEnv := os.Getenv("APP_ENV")
+	rawSecret := os.Getenv("CURSOR_SECRET")
+
+	cursorSecret, err := resolveCursorSecret(appEnv, rawSecret)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	// HTTP ハンドラ（POST /tasks, GET /tasks?projectId=...）
