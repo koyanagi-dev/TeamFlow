@@ -313,16 +313,27 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Status_Multiple(t *testing.T) 
 // TestSQLTaskRepository_FindByProjectID_Filter_Status_InvalidValue は無効な status が domain.NewTaskQuery でエラーになることを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_Status_InvalidValue(t *testing.T) {
 	// 無効な status を domain.NewTaskQuery で作成するとエラーになることを検証
-	_, err := domain.NewTaskQuery(domain.WithStatusFilter("invalid"))
+	invalidStatus := "invalid"
+	_, err := domain.NewTaskQuery(domain.WithStatusFilter(invalidStatus))
 	if err == nil {
 		t.Fatalf("expected error for invalid status, but got nil")
 	}
-	// typed error (ValidationError) で field=status, code=INVALID_ENUM であることを確認
+	// typed error (ValidationError) で field=status, code=INVALID_ENUM, RejectedValue を確認
 	var ve *domain.ValidationError
 	if !errors.As(err, &ve) {
 		t.Errorf("expected ValidationError, got: %T", err)
-	} else if ve.Field != "status" || ve.Code != "INVALID_ENUM" {
-		t.Errorf("expected field=status, code=INVALID_ENUM, got field=%s, code=%s", ve.Field, ve.Code)
+		return
+	}
+	if ve.Field != "status" {
+		t.Errorf("expected field=status, got field=%s", ve.Field)
+	}
+	if ve.Code != "INVALID_ENUM" {
+		t.Errorf("expected code=INVALID_ENUM, got code=%s", ve.Code)
+	}
+	if ve.RejectedValue == nil {
+		t.Errorf("expected RejectedValue to be set, got nil")
+	} else if *ve.RejectedValue != invalidStatus {
+		t.Errorf("expected RejectedValue=%s, got %s", invalidStatus, *ve.RejectedValue)
 	}
 }
 
@@ -394,16 +405,27 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Priority_Multiple(t *testing.T
 // TestSQLTaskRepository_FindByProjectID_Filter_Priority_InvalidValue は無効な priority が domain.NewTaskQuery でエラーになることを検証する。
 func TestSQLTaskRepository_FindByProjectID_Filter_Priority_InvalidValue(t *testing.T) {
 	// 無効な priority を domain.NewTaskQuery で作成するとエラーになることを検証
-	_, err := domain.NewTaskQuery(domain.WithPriorityFilter("pwn"))
+	invalidPriority := "pwn"
+	_, err := domain.NewTaskQuery(domain.WithPriorityFilter(invalidPriority))
 	if err == nil {
 		t.Fatalf("expected error for invalid priority, but got nil")
 	}
-	// typed error (ValidationError) で field=priority, code=INVALID_ENUM であることを確認
+	// typed error (ValidationError) で field=priority, code=INVALID_ENUM, RejectedValue を確認
 	var ve *domain.ValidationError
 	if !errors.As(err, &ve) {
 		t.Errorf("expected ValidationError, got: %T", err)
-	} else if ve.Field != "priority" || ve.Code != "INVALID_ENUM" {
-		t.Errorf("expected field=priority, code=INVALID_ENUM, got field=%s, code=%s", ve.Field, ve.Code)
+		return
+	}
+	if ve.Field != "priority" {
+		t.Errorf("expected field=priority, got field=%s", ve.Field)
+	}
+	if ve.Code != "INVALID_ENUM" {
+		t.Errorf("expected code=INVALID_ENUM, got code=%s", ve.Code)
+	}
+	if ve.RejectedValue == nil {
+		t.Errorf("expected RejectedValue to be set, got nil")
+	} else if *ve.RejectedValue != invalidPriority {
+		t.Errorf("expected RejectedValue=%s, got %s", invalidPriority, *ve.RejectedValue)
 	}
 }
 
@@ -898,16 +920,29 @@ func TestSQLTaskRepository_FindByProjectID_Security_SQLi_InAssigneeID_DoesNotByp
 func TestSQLTaskRepository_FindByProjectID_Security_SortKeyInjection_Ignored(t *testing.T) {
 	// 悪意のある sortKey を domain.NewTaskQuery で作成するとエラーになることを検証
 	// "createdAt; DROP TABLE tasks;--" は無効なキーとして扱われ、エラーになる
-	_, err := domain.NewTaskQuery(domain.WithSort("createdAt; DROP TABLE tasks;--"))
+	// WithSort は key 部分（"-" を除去した後）を RejectedValue に入れるので、
+	// "createdAt; DROP TABLE tasks;--" がそのまま key として扱われる
+	invalidSortKey := "createdAt; DROP TABLE tasks;--"
+	_, err := domain.NewTaskQuery(domain.WithSort(invalidSortKey))
 	if err == nil {
 		t.Fatalf("expected error for invalid sort key with injection attempt, but got nil")
 	}
-	// typed error (ValidationError) で field=sort, code=INVALID_ENUM であることを確認
+	// typed error (ValidationError) で field=sort, code=INVALID_ENUM, RejectedValue を確認
 	var ve *domain.ValidationError
 	if !errors.As(err, &ve) {
 		t.Errorf("expected ValidationError, got: %T", err)
-	} else if ve.Field != "sort" || ve.Code != "INVALID_ENUM" {
-		t.Errorf("expected field=sort, code=INVALID_ENUM, got field=%s, code=%s", ve.Field, ve.Code)
+		return
+	}
+	if ve.Field != "sort" {
+		t.Errorf("expected field=sort, got field=%s", ve.Field)
+	}
+	if ve.Code != "INVALID_ENUM" {
+		t.Errorf("expected code=INVALID_ENUM, got code=%s", ve.Code)
+	}
+	if ve.RejectedValue == nil {
+		t.Errorf("expected RejectedValue to be set, got nil")
+	} else if *ve.RejectedValue != invalidSortKey {
+		t.Errorf("expected RejectedValue=%s, got %s", invalidSortKey, *ve.RejectedValue)
 	}
 }
 

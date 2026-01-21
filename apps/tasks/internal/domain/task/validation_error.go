@@ -28,9 +28,9 @@ func (e *ValidationError) Unwrap() error {
 
 // NewInvalidEnum は INVALID_ENUM エラーを生成する。
 // field: status, priority, sort など
-// rejected: 不正だった値（nil 可）
 // cause: 元のエラー（nil 可）
-func NewInvalidEnum(field string, rejected *string, cause error) *ValidationError {
+// rejected: 不正だった値（nil 可）
+func NewInvalidEnum(field string, cause error, rejected *string) *ValidationError {
 	return &ValidationError{
 		Field:         field,
 		Code:          "INVALID_ENUM",
@@ -41,9 +41,9 @@ func NewInvalidEnum(field string, rejected *string, cause error) *ValidationErro
 
 // NewInvalidFormat は INVALID_FORMAT エラーを生成する。
 // field: dueDateFrom, dueDateTo など
-// rejected: 不正だった値（nil 可）
 // cause: 元のエラー（nil 可）
-func NewInvalidFormat(field string, rejected *string, cause error) *ValidationError {
+// rejected: 不正だった値（nil 可）
+func NewInvalidFormat(field string, cause error, rejected *string) *ValidationError {
 	return &ValidationError{
 		Field:         field,
 		Code:          "INVALID_FORMAT",

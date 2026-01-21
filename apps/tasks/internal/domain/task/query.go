@@ -96,7 +96,7 @@ func WithStatusFilter(statusStr string) TaskQueryOption {
 			// doing -> in_progress 正規化
 			status, err := ParseStatus(part)
 			if err != nil {
-				return NewInvalidEnum("status", &part, err)
+				return NewInvalidEnum("status", err, &part)
 			}
 
 			// 重複排除
@@ -130,7 +130,7 @@ func WithPriorityFilter(priorityStr string) TaskQueryOption {
 
 			priority, err := ParsePriority(part)
 			if err != nil {
-				return NewInvalidEnum("priority", &part, err)
+				return NewInvalidEnum("priority", err, &part)
 			}
 
 			// 重複排除
@@ -163,7 +163,7 @@ func WithDueDateRangeFilter(dueDateFromStr, dueDateToStr string) TaskQueryOption
 		if dueDateFromStr != "" {
 			t, err := time.Parse("2006-01-02", dueDateFromStr)
 			if err != nil {
-				return NewInvalidFormat("dueDateFrom", &dueDateFromStr, err)
+				return NewInvalidFormat("dueDateFrom", err, &dueDateFromStr)
 			}
 			// 日付のみなので時刻は00:00:00に正規化
 			from := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
@@ -173,7 +173,7 @@ func WithDueDateRangeFilter(dueDateFromStr, dueDateToStr string) TaskQueryOption
 		if dueDateToStr != "" {
 			t, err := time.Parse("2006-01-02", dueDateToStr)
 			if err != nil {
-				return NewInvalidFormat("dueDateTo", &dueDateToStr, err)
+				return NewInvalidFormat("dueDateTo", err, &dueDateToStr)
 			}
 			// 日付のみなので時刻は23:59:59に正規化（その日を含むため）
 			to := time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, time.UTC)
@@ -233,7 +233,7 @@ func WithSort(sortStr string) TaskQueryOption {
 			}
 
 			if !validKeys[key] {
-				return NewInvalidEnum("sort", &key, nil)
+				return NewInvalidEnum("sort", nil, &key)
 			}
 
 			orders = append(orders, SortOrder{

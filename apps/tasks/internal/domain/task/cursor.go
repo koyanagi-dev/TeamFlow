@@ -48,6 +48,7 @@ func EncodeCursor(payload CursorPayload, secret []byte) (string, error) {
 
 // DecodeCursor は cursor をデコードし、署名を検証する。
 // エラーは validation error として返す（500にしない）。
+// 元エラーを wrap してデバッグ可能にする。
 func DecodeCursor(cursorStr string, secret []byte) (*CursorPayload, error) {
 	// フォーマットチェック: "payload.sig" の形式
 	parts := strings.Split(cursorStr, ".")
@@ -61,19 +62,19 @@ func DecodeCursor(cursorStr string, secret []byte) (*CursorPayload, error) {
 	// payload をデコード
 	payloadJSON, err := base64.RawURLEncoding.DecodeString(encodedPayload)
 	if err != nil {
-		return nil, ErrCursorInvalidFormat
+		return nil, fmt.Errorf("%w: base64 decode payload: %v", ErrCursorInvalidFormat, err)
 	}
 
 	// JSON をパース
 	var payload CursorPayload
 	if err := json.Unmarshal(payloadJSON, &payload); err != nil {
-		return nil, ErrCursorInvalidFormat
+		return nil, fmt.Errorf("%w: json unmarshal: %v", ErrCursorInvalidFormat, err)
 	}
 
 	// 署名を検証
 	expectedSig, err := base64.RawURLEncoding.DecodeString(encodedSig)
 	if err != nil {
-		return nil, ErrCursorInvalidFormat
+		return nil, fmt.Errorf("%w: base64 decode sig: %v", ErrCursorInvalidFormat, err)
 	}
 
 	mac := hmac.New(sha256.New, secret)

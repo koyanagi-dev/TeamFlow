@@ -2,8 +2,8 @@ package http
 
 import (
 	"errors"
+	"log"
 	"strconv"
-	"strings"
 
 	domain "teamflow-tasks/internal/domain/task"
 )
@@ -52,15 +52,16 @@ func toValidationIssue(err error) ValidationIssue {
 		}
 	}
 
-	// 1. Handler 側 sentinel: errInvalidLimitFormat
-	if errors.Is(err, errInvalidLimitFormat) {
-		rejected := extractRejectedValue(err.Error())
+	// 1. Handler 側 typed error: InvalidLimitError
+	var ile *InvalidLimitError
+	if errors.As(err, &ile) {
+		rejected := ile.RejectedValue
 		return ValidationIssue{
 			Location:      "query",
 			Field:         "limit",
 			Code:          "INVALID_FORMAT",
 			Message:       "limit は整数で指定してください（例: limit=50）。",
-			RejectedValue: rejected,
+			RejectedValue: &rejected,
 		}
 	}
 
@@ -135,7 +136,8 @@ func toValidationIssue(err error) ValidationIssue {
 		}
 	}
 
-	// fallback: 想定外でも 400 の形式は崩さない
+	// fallback: 想定外でも 400 の形式は崩さない（ログ出力してデバッグ可能に）
+	log.Printf("WARNING: unmapped validation error: %T %v", err, err)
 	return ValidationIssue{
 		Location: "query",
 		Field:    "unknown",
@@ -175,12 +177,27 @@ func getMessageForFieldAndCode(field, code string) string {
 	return "クエリパラメータが不正です。入力内容を確認してください。"
 }
 
-// --- Sentinel errors（handler側のパースエラーなどを識別したい時用） ---
+// --- InvalidLimitError: handler側の limit パースエラー用 typed error ---
 
-var errInvalidLimitFormat = errors.New("invalid limit format")
+// InvalidLimitError は limit パース失敗時のエラー。
+// 文字列パースに頼らず、構造化された rejectedValue を持つ。
+type InvalidLimitError struct {
+	RejectedValue string // パースに失敗した元の値
+	cause         error  // 元のエラー（strconv.Atoi の戻り値など）
+}
 
-// ParseLimit: handler側で limit の parse をするならこういう小関数にまとめると便利。
-// - 失敗したら sentinel error でラップして toValidationIssue が判定できるようにする。
+// Error は error インターフェースを満たす。
+func (e *InvalidLimitError) Error() string {
+	return "invalid limit format: " + e.RejectedValue
+}
+
+// Unwrap は cause を返す（errors.Unwrap 対応）。
+func (e *InvalidLimitError) Unwrap() error {
+	return e.cause
+}
+
+// ParseLimit: handler側で limit の parse をする。
+// 失敗したら InvalidLimitError を返し、toValidationIssue で errors.As で判定できる。
 func ParseLimit(raw string) (int, error) {
 	if raw == "" {
 		// 未指定は上位で default を入れる運用にする（例: 200）
@@ -188,30 +205,7 @@ func ParseLimit(raw string) (int, error) {
 	}
 	v, err := strconv.Atoi(raw)
 	if err != nil {
-		// rejectedValue を拾いたいなら、エラーメッセージに raw を含める
-		return 0, wrapInvalidLimitFormat(raw)
+		return 0, &InvalidLimitError{RejectedValue: raw, cause: err}
 	}
 	return v, nil
-}
-
-func wrapInvalidLimitFormat(raw string) error {
-	// err.Error() に raw を含める（extractRejectedValue で拾える）
-	return errors.Join(errInvalidLimitFormat, errors.New("rejected="+raw))
-}
-
-// --- rejectedValue 抽出ユーティリティ ---
-// sentinel error の rejectedValue 用に限定して使用
-
-func extractRejectedValue(s string) *string {
-	// Joinで "rejected=xxx" を混ぜたときに拾う簡易版
-	// 例: "... rejected=abc"
-	idx := strings.LastIndex(s, "rejected=")
-	if idx < 0 {
-		return nil
-	}
-	v := strings.TrimSpace(s[idx+len("rejected="):])
-	if v == "" {
-		return nil
-	}
-	return &v
 }
