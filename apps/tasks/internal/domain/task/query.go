@@ -3,8 +3,6 @@ package task
 import (
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -98,7 +96,7 @@ func WithStatusFilter(statusStr string) TaskQueryOption {
 			// doing -> in_progress 正規化
 			status, err := ParseStatus(part)
 			if err != nil {
-				return fmt.Errorf("invalid status in filter: %w", err)
+				return NewInvalidEnum("status", &part, err)
 			}
 
 			// 重複排除
@@ -132,7 +130,7 @@ func WithPriorityFilter(priorityStr string) TaskQueryOption {
 
 			priority, err := ParsePriority(part)
 			if err != nil {
-				return fmt.Errorf("invalid priority in filter: %w", err)
+				return NewInvalidEnum("priority", &part, err)
 			}
 
 			// 重複排除
@@ -165,7 +163,7 @@ func WithDueDateRangeFilter(dueDateFromStr, dueDateToStr string) TaskQueryOption
 		if dueDateFromStr != "" {
 			t, err := time.Parse("2006-01-02", dueDateFromStr)
 			if err != nil {
-				return fmt.Errorf("invalid dueDateFrom format (expected YYYY-MM-DD): %w", err)
+				return NewInvalidFormat("dueDateFrom", &dueDateFromStr, err)
 			}
 			// 日付のみなので時刻は00:00:00に正規化
 			from := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
@@ -175,7 +173,7 @@ func WithDueDateRangeFilter(dueDateFromStr, dueDateToStr string) TaskQueryOption
 		if dueDateToStr != "" {
 			t, err := time.Parse("2006-01-02", dueDateToStr)
 			if err != nil {
-				return fmt.Errorf("invalid dueDateTo format (expected YYYY-MM-DD): %w", err)
+				return NewInvalidFormat("dueDateTo", &dueDateToStr, err)
 			}
 			// 日付のみなので時刻は23:59:59に正規化（その日を含むため）
 			to := time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, time.UTC)
@@ -235,7 +233,7 @@ func WithSort(sortStr string) TaskQueryOption {
 			}
 
 			if !validKeys[key] {
-				return fmt.Errorf("invalid sort key: %s (valid keys: sortOrder, createdAt, updatedAt, dueDate, priority)", key)
+				return NewInvalidEnum("sort", &key, nil)
 			}
 
 			orders = append(orders, SortOrder{
@@ -260,18 +258,18 @@ func WithLimit(limit int) TaskQueryOption {
 // Validate はQuery Objectの整合性をチェックする。
 func (q *TaskQuery) Validate() error {
 	if q.Limit < 1 || q.Limit > 200 {
-		return errors.New("limit must be between 1 and 200")
+		return ErrLimitOutOfRange
 	}
 
 	if q.DueDateFrom != nil && q.DueDateTo != nil {
 		if q.DueDateFrom.After(*q.DueDateTo) {
-			return errors.New("dueDateFrom must not be after dueDateTo")
+			return ErrDueDateFromAfterTo
 		}
 	}
 
 	// cursor + sort 併用禁止
 	if q.Cursor != nil && len(q.SortOrders) > 0 {
-		return errors.New("sort is incompatible with cursor")
+		return ErrSortIncompatibleWithCursor
 	}
 
 	return nil
@@ -351,7 +349,7 @@ func WithCursor(cursorStr string, projectID string, secret []byte, now time.Time
 		// createdAt をパース（micro秒丸め）
 		createdAt, err := ParseCursorCreatedAt(payload.CreatedAt)
 		if err != nil {
-			return errors.New("invalid cursor format")
+			return ErrCursorInvalidFormat
 		}
 
 		// 有効期限チェック
@@ -361,13 +359,13 @@ func WithCursor(cursorStr string, projectID string, secret []byte, now time.Time
 
 		// projectID の一致確認
 		if payload.ProjectID != projectID {
-			return errors.New("cursor query mismatch")
+			return ErrCursorQueryMismatch
 		}
 
 		// qhash の一致確認
 		computedQHash := q.ComputeQHash(projectID)
 		if computedQHash != payload.QHash {
-			return errors.New("cursor query mismatch")
+			return ErrCursorQueryMismatch
 		}
 
 		// TaskCursor を設定

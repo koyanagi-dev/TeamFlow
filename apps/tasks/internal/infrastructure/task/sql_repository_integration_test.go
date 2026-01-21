@@ -5,6 +5,7 @@ package taskinfra
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -316,9 +317,12 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Status_InvalidValue(t *testing
 	if err == nil {
 		t.Fatalf("expected error for invalid status, but got nil")
 	}
-	// エラーメッセージに "invalid status" が含まれることを確認
-	if !strings.Contains(err.Error(), "invalid status") {
-		t.Errorf("expected error message to contain 'invalid status', got: %v", err)
+	// typed error (ValidationError) で field=status, code=INVALID_ENUM であることを確認
+	var ve *domain.ValidationError
+	if !errors.As(err, &ve) {
+		t.Errorf("expected ValidationError, got: %T", err)
+	} else if ve.Field != "status" || ve.Code != "INVALID_ENUM" {
+		t.Errorf("expected field=status, code=INVALID_ENUM, got field=%s, code=%s", ve.Field, ve.Code)
 	}
 }
 
@@ -394,9 +398,12 @@ func TestSQLTaskRepository_FindByProjectID_Filter_Priority_InvalidValue(t *testi
 	if err == nil {
 		t.Fatalf("expected error for invalid priority, but got nil")
 	}
-	// エラーメッセージに "invalid priority" が含まれることを確認
-	if !strings.Contains(err.Error(), "invalid priority") {
-		t.Errorf("expected error message to contain 'invalid priority', got: %v", err)
+	// typed error (ValidationError) で field=priority, code=INVALID_ENUM であることを確認
+	var ve *domain.ValidationError
+	if !errors.As(err, &ve) {
+		t.Errorf("expected ValidationError, got: %T", err)
+	} else if ve.Field != "priority" || ve.Code != "INVALID_ENUM" {
+		t.Errorf("expected field=priority, code=INVALID_ENUM, got field=%s, code=%s", ve.Field, ve.Code)
 	}
 }
 
@@ -895,9 +902,12 @@ func TestSQLTaskRepository_FindByProjectID_Security_SortKeyInjection_Ignored(t *
 	if err == nil {
 		t.Fatalf("expected error for invalid sort key with injection attempt, but got nil")
 	}
-	// エラーメッセージに "invalid sort key" が含まれることを確認
-	if !strings.Contains(err.Error(), "invalid sort key") {
-		t.Errorf("expected error message to contain 'invalid sort key', got: %v", err)
+	// typed error (ValidationError) で field=sort, code=INVALID_ENUM であることを確認
+	var ve *domain.ValidationError
+	if !errors.As(err, &ve) {
+		t.Errorf("expected ValidationError, got: %T", err)
+	} else if ve.Field != "sort" || ve.Code != "INVALID_ENUM" {
+		t.Errorf("expected field=sort, code=INVALID_ENUM, got field=%s, code=%s", ve.Field, ve.Code)
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -53,7 +52,7 @@ func DecodeCursor(cursorStr string, secret []byte) (*CursorPayload, error) {
 	// フォーマットチェック: "payload.sig" の形式
 	parts := strings.Split(cursorStr, ".")
 	if len(parts) != 2 {
-		return nil, errors.New("invalid cursor format")
+		return nil, ErrCursorInvalidFormat
 	}
 
 	encodedPayload := parts[0]
@@ -62,19 +61,19 @@ func DecodeCursor(cursorStr string, secret []byte) (*CursorPayload, error) {
 	// payload をデコード
 	payloadJSON, err := base64.RawURLEncoding.DecodeString(encodedPayload)
 	if err != nil {
-		return nil, errors.New("invalid cursor format")
+		return nil, ErrCursorInvalidFormat
 	}
 
 	// JSON をパース
 	var payload CursorPayload
 	if err := json.Unmarshal(payloadJSON, &payload); err != nil {
-		return nil, errors.New("invalid cursor format")
+		return nil, ErrCursorInvalidFormat
 	}
 
 	// 署名を検証
 	expectedSig, err := base64.RawURLEncoding.DecodeString(encodedSig)
 	if err != nil {
-		return nil, errors.New("invalid cursor format")
+		return nil, ErrCursorInvalidFormat
 	}
 
 	mac := hmac.New(sha256.New, secret)
@@ -82,7 +81,7 @@ func DecodeCursor(cursorStr string, secret []byte) (*CursorPayload, error) {
 	computedSig := mac.Sum(nil)
 
 	if !hmac.Equal(expectedSig, computedSig) {
-		return nil, errors.New("invalid cursor signature")
+		return nil, ErrCursorInvalidSignature
 	}
 
 	return &payload, nil
@@ -109,7 +108,7 @@ func FormatCursorCreatedAt(t time.Time) string {
 func ValidateCursorExpiry(payload *CursorPayload, now time.Time) error {
 	nowUnix := now.Unix()
 	if nowUnix-payload.IssuedAt > 86400 {
-		return errors.New("cursor expired")
+		return ErrCursorExpired
 	}
 	return nil
 }
