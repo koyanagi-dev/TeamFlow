@@ -29,12 +29,10 @@ func TestTaskHandler_CursorPagination_FirstPageReturnsNextCursor(t *testing.T) {
 
 	// Setup handler with real dependencies
 	repo := taskinfra.NewSQLTaskRepository(db)
-	createUC := &usecase.CreateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
-	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	nowFunc := func() time.Time { return time.Now().UTC() }
 	cursorSecret := []byte("test-secret")
-	handler := NewTaskHandler(createUC, listUC, updateUC, nowFunc, cursorSecret)
+	handler := NewListTaskHandler(listUC, nowFunc, cursorSecret)
 
 	// Seed: 5件以上、limit=2で複数ページになる数
 	// createdAt が同一の行を最低2件含める（tie-breaker: id）
@@ -150,12 +148,10 @@ func TestTaskHandler_CursorPagination_Error_INCOMPATIBLE_WITH_CURSOR(t *testing.
 	testutil.ResetTasksTable(t, db)
 
 	repo := taskinfra.NewSQLTaskRepository(db)
-	createUC := &usecase.CreateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
-	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	nowFunc := func() time.Time { return time.Now().UTC() }
 	cursorSecret := []byte("test-secret")
-	handler := NewTaskHandler(createUC, listUC, updateUC, nowFunc, cursorSecret)
+	handler := NewListTaskHandler(listUC, nowFunc, cursorSecret)
 
 	// 有効な cursor を生成
 	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
@@ -208,12 +204,10 @@ func TestTaskHandler_CursorPagination_Error_INVALID_FORMAT(t *testing.T) {
 	testutil.ResetTasksTable(t, db)
 
 	repo := taskinfra.NewSQLTaskRepository(db)
-	createUC := &usecase.CreateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
-	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	nowFunc := func() time.Time { return time.Now().UTC() }
 	cursorSecret := []byte("test-secret")
-	handler := NewTaskHandler(createUC, listUC, updateUC, nowFunc, cursorSecret)
+	handler := NewListTaskHandler(listUC, nowFunc, cursorSecret)
 
 	// 形式不正な cursor（ドットなし）
 	req1 := httptest.NewRequest(http.MethodGet, "/projects/proj-1/tasks?limit=2&cursor=not-a-valid-cursor", nil)
@@ -260,12 +254,10 @@ func TestTaskHandler_CursorPagination_Error_INVALID_SIGNATURE(t *testing.T) {
 	testutil.ResetTasksTable(t, db)
 
 	repo := taskinfra.NewSQLTaskRepository(db)
-	createUC := &usecase.CreateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
-	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	nowFunc := func() time.Time { return time.Now().UTC() }
 	cursorSecret := []byte("test-secret")
-	handler := NewTaskHandler(createUC, listUC, updateUC, nowFunc, cursorSecret)
+	handler := NewListTaskHandler(listUC, nowFunc, cursorSecret)
 
 	// 正しい cursor を生成（qhash を計算するために query を作成）
 	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
@@ -324,12 +316,10 @@ func TestTaskHandler_CursorPagination_Error_EXPIRED(t *testing.T) {
 	testutil.ResetTasksTable(t, db)
 
 	repo := taskinfra.NewSQLTaskRepository(db)
-	createUC := &usecase.CreateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
-	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	nowFunc := func() time.Time { return time.Now().UTC() }
 	cursorSecret := []byte("test-secret")
-	handler := NewTaskHandler(createUC, listUC, updateUC, nowFunc, cursorSecret)
+	handler := NewListTaskHandler(listUC, nowFunc, cursorSecret)
 
 	// 過去の iat で cursor を生成（24時間以上前）
 	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
@@ -381,12 +371,10 @@ func TestTaskHandler_CursorPagination_Error_QUERY_MISMATCH(t *testing.T) {
 	testutil.ResetTasksTable(t, db)
 
 	repo := taskinfra.NewSQLTaskRepository(db)
-	createUC := &usecase.CreateTaskUsecase{Repo: repo}
 	listUC := &usecase.ListTasksByProjectUsecase{Repo: repo}
-	updateUC := &usecase.UpdateTaskUsecase{Repo: repo}
 	nowFunc := func() time.Time { return time.Now().UTC() }
 	cursorSecret := []byte("test-secret")
-	handler := NewTaskHandler(createUC, listUC, updateUC, nowFunc, cursorSecret)
+	handler := NewListTaskHandler(listUC, nowFunc, cursorSecret)
 
 	// フィルタなしで cursor を生成
 	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)

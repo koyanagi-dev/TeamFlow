@@ -35,13 +35,21 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// HTTP ハンドラ（POST /tasks, GET /tasks?projectId=...）
-	taskHandler := httphandler.NewTaskHandler(createUC, listUC, updateUC, time.Now, cursorSecret)
+	// HTTP ハンドラ
+	createHandler := httphandler.NewCreateTaskHandler(createUC, time.Now)
+	listHandler := httphandler.NewListTaskHandler(listUC, time.Now, cursorSecret)
+	updateHandler := httphandler.NewUpdateTaskHandler(updateUC)
 
 	mux := http.NewServeMux()
 	
 	// API はすべて /api 配下
-	mux.Handle("/api/", http.StripPrefix("/api", taskHandler))
+	// POST /api/tasks と GET /api/tasks?projectId=xxx (旧API)
+	mux.Handle("/api/tasks", createHandler)
+	mux.Handle("/api/tasks", listHandler)
+	// GET /api/projects/{projectId}/tasks (新API)
+	mux.Handle("/api/projects/", listHandler)
+	// PATCH /api/tasks/{id}
+	mux.Handle("/api/tasks/", updateHandler)
 
 	// ヘルスチェック
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
