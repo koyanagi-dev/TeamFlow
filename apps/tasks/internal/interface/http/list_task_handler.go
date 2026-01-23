@@ -44,18 +44,19 @@ func (h *ListTaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// /projects/{projectId}/tasks の処理
-	if strings.HasPrefix(r.URL.Path, "/projects/") && strings.HasSuffix(r.URL.Path, "/tasks") {
-		// /projects/{projectId}/tasks から projectId を抽出
-		path := strings.TrimPrefix(r.URL.Path, "/projects/")
+	// /api/projects/{projectId}/tasks の処理
+	if strings.HasPrefix(r.URL.Path, "/api/projects/") && strings.HasSuffix(r.URL.Path, "/tasks") {
+		// /api/projects/{projectId}/tasks から projectId を抽出
+		path := strings.TrimPrefix(r.URL.Path, "/api/projects/")
 		path = strings.TrimSuffix(path, "/tasks")
 		projectID := path
 		h.handleListByProjectWithQuery(w, r, projectID)
 		return
 	}
 
-	// /tasks?projectId=xxx の処理（既存API、後方互換性のため残す）
-	if r.URL.Path == "/tasks" {
+	// /api/tasks?projectId=xxx の処理（旧API、後方互換性のため残す）
+	// /tasks も後方互換性のためサポート
+	if r.URL.Path == "/api/tasks" || r.URL.Path == "/tasks" {
 		h.handleListByProject(w, r)
 		return
 	}

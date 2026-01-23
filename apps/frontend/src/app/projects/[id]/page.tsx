@@ -1,9 +1,14 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/api/client';
 import { normalizeApiError } from '@/lib/api/error';
-import { PROJECTS_BASE, TASKS_BASE } from '@/lib/api/config';
 import { ValidationIssues } from '@/components/ValidationIssues';
 import type { ValidationIssue } from '@/lib/api/types';
+
+// Server-side: use process.env directly (not NEXT_PUBLIC_)
+const PROJECTS_BASE =
+  process.env.PROJECTS_BASE ?? process.env.NEXT_PUBLIC_PROJECTS_BASE ?? 'http://localhost:8080';
+const TASKS_BASE =
+  process.env.TASKS_BASE ?? process.env.NEXT_PUBLIC_TASKS_BASE ?? 'http://localhost:8081/api';
 
 type Project = {
   id: string;

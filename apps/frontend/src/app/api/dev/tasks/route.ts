@@ -17,6 +17,11 @@ export async function GET(req: NextRequest) {
 
     const text = await res.text();
 
+    // 404の場合は空配列を返す（タスクが0件の場合も404になる可能性があるため）
+    if (res.status === 404) {
+      return NextResponse.json([], { status: 200 });
+    }
+
     try {
       const data = JSON.parse(text);
       return NextResponse.json(data, { status: res.status });
