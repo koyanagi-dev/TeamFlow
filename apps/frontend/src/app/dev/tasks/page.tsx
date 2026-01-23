@@ -1,6 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { apiFetch } from '@/lib/api/client';
+import { normalizeApiError } from '@/lib/api/error';
+import { ValidationIssues } from '@/components/ValidationIssues';
+import type { ValidationIssue } from '@/lib/api/types';
 
 type Task = {
   id: string;
@@ -21,13 +25,15 @@ function generateTaskId() {
 function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () => void }) {
   // Map "in_progress" from API response to "doing" for UI
   const normalizeStatus = (s: string) => s === 'in_progress' ? 'doing' : s;
-  const denormalizeStatus = (s: string) => s === 'doing' ? 'in_progress' : s;
 
   const [titleInput, setTitleInput] = useState<string>(task.title);
   const [statusInput, setStatusInput] = useState<string>(normalizeStatus(task.status));
   const [priorityInput, setPriorityInput] = useState<string>(task.priority);
   const [updating, setUpdating] = useState(false);
-  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<{
+    message: string;
+    issues?: ValidationIssue[];
+  } | null>(null);
 
   // task が変わったら inputs も更新（外部から更新された場合）
   useEffect(() => {
@@ -61,21 +67,17 @@ function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () =>
         return;
       }
 
-      const res = await fetch(`/api/dev/tasks?id=${encodeURIComponent(task.id)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      await apiFetch<unknown>(
+        `/api/dev/tasks?id=${encodeURIComponent(task.id)}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        }
+      );
 
-      const text = await res.text();
-      if (!res.ok) throw new Error(text);
-
-      // 成功したら一覧を再取得
       onUpdateSuccess();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setUpdateError(msg);
-      alert(`Failed to update: ${msg}`);
+      setUpdateError(normalizeApiError(err));
     } finally {
       setUpdating(false);
     }
@@ -136,8 +138,9 @@ function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () =>
         </button>
       </div>
       {updateError && (
-        <div className="text-xs text-red-600 whitespace-pre-wrap">
-          Update Error: {updateError}
+        <div className="space-y-1">
+          <div className="text-xs text-red-600">Update Error: {updateError.message}</div>
+          <ValidationIssues issues={updateError.issues} />
         </div>
       )}
     </div>
@@ -153,10 +156,16 @@ export default function DevTasksPage() {
   const [priority, setPriority] = useState<string>('medium');
 
   const [loading, setLoading] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<{
+    message: string;
+    issues?: ValidationIssue[];
+  } | null>(null);
 
   const [listLoading, setListLoading] = useState(false);
-  const [listError, setListError] = useState<string | null>(null);
+  const [listError, setListError] = useState<{
+    message: string;
+    issues?: ValidationIssue[];
+  } | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
 
   const projectIdForFetch = useMemo(() => projectId.trim(), [projectId]);
@@ -167,18 +176,12 @@ export default function DevTasksPage() {
     setListError(null);
 
     try {
-      const res = await fetch(`/api/dev/tasks?projectId=${encodeURIComponent(pid)}`, {
-        method: 'GET',
-      });
-
-      const text = await res.text();
-      if (!res.ok) throw new Error(text);
-
-      const data = JSON.parse(text) as Task[];
+      const data = await apiFetch<Task[]>(
+        `/api/dev/tasks?projectId=${encodeURIComponent(pid)}`
+      );
       setTasks(Array.isArray(data) ? data : []);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setListError(msg);
+      setListError(normalizeApiError(err));
       setTasks([]);
     } finally {
       setListLoading(false);
@@ -196,9 +199,8 @@ export default function DevTasksPage() {
     setCreateError(null);
 
     try {
-      const res = await fetch('/api/dev/tasks', {
+      await apiFetch<unknown>('/api/dev/tasks', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id,
           projectId,
@@ -209,15 +211,10 @@ export default function DevTasksPage() {
         }),
       });
 
-      const text = await res.text();
-      if (!res.ok) throw new Error(text);
-
-      // 作成後に一覧を再取得（確実に全件が反映される）
       setId(generateTaskId());
       await fetchTasks(projectId.trim());
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setCreateError(msg);
+      setCreateError(normalizeApiError(err));
     } finally {
       setLoading(false);
     }
@@ -311,14 +308,16 @@ export default function DevTasksPage() {
       </form>
 
       {createError && (
-        <div className="text-sm text-red-600 whitespace-pre-wrap">
-          Create Error: {createError}
+        <div className="space-y-1">
+          <div className="text-sm text-red-600">Create Error: {createError.message}</div>
+          <ValidationIssues issues={createError.issues} />
         </div>
       )}
 
       {listError && (
-        <div className="text-sm text-red-600 whitespace-pre-wrap">
-          List Error: {listError}
+        <div className="space-y-1">
+          <div className="text-sm text-red-600">List Error: {listError.message}</div>
+          <ValidationIssues issues={listError.issues} />
         </div>
       )}
 

@@ -1,4 +1,9 @@
 import Link from 'next/link';
+import { apiFetch } from '@/lib/api/client';
+import { normalizeApiError } from '@/lib/api/error';
+import { PROJECTS_BASE, TASKS_BASE } from '@/lib/api/config';
+import { ValidationIssues } from '@/components/ValidationIssues';
+import type { ValidationIssue } from '@/lib/api/types';
 
 type Project = {
   id: string;
@@ -20,26 +25,20 @@ type Task = {
 };
 
 async function fetchProjects(): Promise<Project[]> {
-  const res = await fetch('http://localhost:8080/projects', {
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to load projects: ${res.status} ${text}`);
-  }
-  return res.json();
+  return apiFetch<Project[]>(`${PROJECTS_BASE}/projects`);
 }
 
 async function fetchTasksByProject(projectId: string): Promise<Task[]> {
-  const res = await fetch(
-    `http://localhost:8081/tasks?projectId=${encodeURIComponent(projectId)}`,
-    { cache: 'no-store' },
+  const data = await apiFetch<Task[]>(
+    `${TASKS_BASE}/tasks?projectId=${encodeURIComponent(projectId)}`
   );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to load tasks: ${res.status} ${text}`);
-  }
-  return res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+function displayStatus(s: string): 'todo' | 'doing' | 'done' {
+  if (s === 'done') return 'done';
+  if (s === 'in_progress' || s === 'doing') return 'doing';
+  return 'todo';
 }
 
 type PageProps = {
@@ -51,6 +50,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
   let projects: Project[] = [];
   let tasks: Task[] = [];
+  let fetchError: { message: string; issues?: ValidationIssue[] } | null = null;
 
   try {
     const [p, t] = await Promise.all([
@@ -60,15 +60,18 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     projects = p;
     tasks = t;
   } catch (e) {
+    const n = normalizeApiError(e);
+    fetchError = { message: n.message, issues: n.issues };
+  }
+
+  if (fetchError) {
     return (
       <div className="max-w-3xl mx-auto p-6 space-y-4">
         <header className="space-y-2">
           <h1 className="text-2xl font-bold">Project Detail</h1>
         </header>
-        <p className="text-red-600 text-sm">
-          プロジェクトまたはタスク情報の取得に失敗しました。
-          バックエンド（Go services）が起動しているか確認してください。
-        </p>
+        <p className="text-red-600 text-sm">{fetchError.message}</p>
+        <ValidationIssues issues={fetchError.issues} />
         <Link href="/projects" className="text-sm text-blue-600 underline">
           ← Projects に戻る
         </Link>
@@ -95,8 +98,19 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     );
   }
 
+  const todoTasks = tasks.filter((t) => displayStatus(t.status) === 'todo');
+  const doingTasks = tasks.filter((t) => displayStatus(t.status) === 'doing');
+  const doneTasks = tasks.filter((t) => displayStatus(t.status) === 'done');
+
+  type Col = { id: 'todo' | 'doing' | 'done'; label: string; items: Task[] };
+  const cols: Col[] = [
+    { id: 'todo', label: 'todo', items: todoTasks },
+    { id: 'doing', label: 'doing', items: doingTasks },
+    { id: 'done', label: 'done', items: doneTasks },
+  ];
+
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-6 space-y-6">
       <header className="space-y-2">
         <Link href="/projects" className="text-sm text-blue-600 underline">
           ← Projects 一覧に戻る
@@ -105,24 +119,16 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         <p className="text-xs font-mono text-gray-500">ID: {project.id}</p>
       </header>
 
-      {/* プロジェクト概要 */}
       <section className="space-y-2 border rounded-xl p-4 bg-white shadow-sm">
         {project.description && (
           <p className="text-sm text-gray-800">{project.description}</p>
         )}
         <div className="text-xs text-gray-500 space-y-1">
-          <div>
-            Created:{' '}
-            {new Date(project.createdAt).toLocaleString()}
-          </div>
-          <div>
-            Updated:{' '}
-            {new Date(project.updatedAt).toLocaleString()}
-          </div>
+          <div>Created: {new Date(project.createdAt).toLocaleString()}</div>
+          <div>Updated: {new Date(project.updatedAt).toLocaleString()}</div>
         </div>
       </section>
 
-      {/* タスク一覧 */}
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">Tasks</h2>
 
@@ -130,33 +136,45 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           <p className="text-sm text-gray-600">
             このプロジェクトに紐づくタスクはまだありません。<br />
             開発用ページ{' '}
-            <code className="px-1 py-0.5 bg-gray-100 rounded">
-              /dev/tasks
-            </code>{' '}
+            <code className="px-1 py-0.5 bg-gray-100 rounded">/dev/tasks</code>{' '}
             から projectId = {project.id} のタスクを作成してみてください。
           </p>
         ) : (
-          <ul className="space-y-2">
-            {tasks.map((t) => (
-              <li
-                key={t.id}
-                className="border rounded-lg p-3 bg-white shadow-sm text-sm space-y-1"
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {cols.map((col) => (
+              <div
+                key={col.id}
+                className="border rounded-xl p-3 bg-gray-50 shadow-sm"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{t.title}</span>
-                  <span className="text-[11px] text-gray-500">
-                    {t.status} / {t.priority}
-                  </span>
-                </div>
-                {t.description && (
-                  <p className="text-gray-700">{t.description}</p>
-                )}
-                <div className="text-[11px] text-gray-500">
-                  Updated: {new Date(t.updatedAt).toLocaleString()}
-                </div>
-              </li>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                  {col.label}
+                </h3>
+                <ul className="space-y-2">
+                  {col.items.map((t) => (
+                    <li
+                      key={t.id}
+                      className="border rounded-lg p-3 bg-white shadow-sm text-sm space-y-1"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium truncate">{t.title}</span>
+                        <span className="text-[11px] text-gray-500 shrink-0">
+                          {t.priority}
+                        </span>
+                      </div>
+                      {t.description && (
+                        <p className="text-gray-700 line-clamp-2">
+                          {t.description}
+                        </p>
+                      )}
+                      <div className="text-[11px] text-gray-500">
+                        Updated: {new Date(t.updatedAt).toLocaleString()}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </section>
     </div>
