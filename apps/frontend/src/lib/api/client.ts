@@ -5,12 +5,18 @@ export async function apiFetch<T>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
+  // Content-Type は body がある場合のみ付与する
+  // 既に init.headers に Content-Type が指定されている場合はそれを尊重
+  const existingHeaders = init.headers as Record<string, string> | undefined;
+  const headers: Record<string, string> = existingHeaders ? { ...existingHeaders } : {};
+  
+  if (init.body && !headers['Content-Type'] && !headers['content-type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const res = await fetch(path, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
     credentials: 'include',
     cache: 'no-store',
   });

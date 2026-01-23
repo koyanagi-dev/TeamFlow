@@ -17,9 +17,31 @@ export async function GET(req: NextRequest) {
 
     const text = await res.text();
 
-    // 404の場合は空配列を返す（タスクが0件の場合も404になる可能性があるため）
+    // 404の処理: projectIdが指定されている場合のみ、旧Tasks APIの0件が404になるケースを考慮
+    // ただし、本当の404（パスミス/サービス未起動/ルーティング崩れ）はそのまま返す
     if (res.status === 404) {
-      return NextResponse.json([], { status: 200 });
+      // projectIdが指定されていて、かつ tasks list API へのリクエストの場合のみ
+      // 0件の可能性があるため空配列を返す
+      // それ以外の404はそのまま返す（エラーとして検知可能にする）
+      const requestUrl = `${TASKS_API_BASE_URL}/tasks?projectId=${encodeURIComponent(projectId)}`;
+      if (projectId && requestUrl.includes('/tasks')) {
+        // レスポンスボディが空の場合は0件とみなす
+        // エラーメッセージがある場合は本当の404として扱う
+        if (!text || text.trim() === '') {
+          return NextResponse.json([], { status: 200 });
+        }
+        // エラーメッセージがある場合は本当の404として返す
+        console.warn(
+          `GET /api/dev/tasks: upstream returned 404 with body for projectId=${projectId}: ${text}`
+        );
+      }
+      // 404をそのまま返す
+      try {
+        const data = JSON.parse(text);
+        return NextResponse.json(data, { status: 404 });
+      } catch {
+        return new NextResponse(text, { status: 404 });
+      }
     }
 
     try {
