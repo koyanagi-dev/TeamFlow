@@ -49,8 +49,17 @@ func (h *UpdateTaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// /tasks/{id} から id を抽出
-	path := strings.TrimPrefix(r.URL.Path, "/tasks/")
+	// /api/tasks/{id} または /tasks/{id} から id を抽出
+	var path string
+	if strings.HasPrefix(r.URL.Path, "/api/tasks/") {
+		path = strings.TrimPrefix(r.URL.Path, "/api/tasks/")
+	} else if strings.HasPrefix(r.URL.Path, "/tasks/") {
+		path = strings.TrimPrefix(r.URL.Path, "/tasks/")
+	} else {
+		writeErrorResponse(w, http.StatusBadRequest, "validation error", "invalid task id")
+		return
+	}
+
 	if path == "" || strings.Contains(path, "/") {
 		writeErrorResponse(w, http.StatusBadRequest, "validation error", "invalid task id")
 		return

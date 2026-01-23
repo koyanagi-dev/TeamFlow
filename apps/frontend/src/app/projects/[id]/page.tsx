@@ -46,6 +46,23 @@ function displayStatus(s: string): 'todo' | 'doing' | 'done' {
   return 'todo';
 }
 
+function priorityOrder(p: string): number {
+  switch (p) {
+    case 'high':
+      return 3;
+    case 'medium':
+      return 2;
+    case 'low':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function sortTasksByPriority(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => priorityOrder(b.priority) - priorityOrder(a.priority));
+}
+
 type PageProps = {
   params: Promise<{ id: string }>;
 };
@@ -103,9 +120,15 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     );
   }
 
-  const todoTasks = tasks.filter((t) => displayStatus(t.status) === 'todo');
-  const doingTasks = tasks.filter((t) => displayStatus(t.status) === 'doing');
-  const doneTasks = tasks.filter((t) => displayStatus(t.status) === 'done');
+  const todoTasks = sortTasksByPriority(
+    tasks.filter((t) => displayStatus(t.status) === 'todo')
+  );
+  const doingTasks = sortTasksByPriority(
+    tasks.filter((t) => displayStatus(t.status) === 'doing')
+  );
+  const doneTasks = sortTasksByPriority(
+    tasks.filter((t) => displayStatus(t.status) === 'done')
+  );
 
   type Col = { id: 'todo' | 'doing' | 'done'; label: string; items: Task[] };
   const cols: Col[] = [
