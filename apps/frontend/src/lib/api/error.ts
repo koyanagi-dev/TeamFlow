@@ -12,14 +12,28 @@ export function isErrorResponse(x: unknown): x is ErrorResponse {
 export function normalizeApiError(
   e: unknown
 ): { message: string; issues?: ValidationIssue[] } {
-  if (e !== null && typeof e === 'object' && 'message' in e) {
-    const anyErr = e as ApiError & { message?: unknown; issues?: unknown };
+  // Check if it's ApiError-like (has status, error, message)
+  if (
+    e !== null &&
+    typeof e === 'object' &&
+    'status' in e &&
+    'error' in e &&
+    'message' in e
+  ) {
+    const apiErr = e as ApiError & { message?: unknown; issues?: unknown };
     const message =
-      typeof anyErr.message === 'string' ? anyErr.message : 'Request failed';
-    const issues = Array.isArray(anyErr.issues)
-      ? (anyErr.issues as ValidationIssue[])
+      typeof apiErr.message === 'string' ? apiErr.message : 'Request failed';
+    const issues = Array.isArray(apiErr.issues)
+      ? (apiErr.issues as ValidationIssue[])
       : undefined;
     return { message, issues };
   }
+
+  // Fallback: Error instance
+  if (e instanceof Error) {
+    return { message: e.message };
+  }
+
+  // Final fallback
   return { message: String(e ?? 'Request failed') };
 }

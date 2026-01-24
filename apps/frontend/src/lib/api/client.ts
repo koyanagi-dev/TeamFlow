@@ -1,6 +1,20 @@
 import type { ApiError } from './types';
 import { isErrorResponse } from './error';
 
+function extractMessage(maybeJson: unknown, fallbackText: string): string {
+  if (maybeJson !== null && typeof maybeJson === 'object') {
+    const obj = maybeJson as {
+      message?: string;
+      detail?: string;
+      error?: string;
+    };
+    if (typeof obj.message === 'string') return obj.message;
+    if (typeof obj.detail === 'string') return obj.detail;
+    if (typeof obj.error === 'string') return obj.error;
+  }
+  return fallbackText;
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {}
@@ -9,7 +23,7 @@ export async function apiFetch<T>(
   const headers = new Headers(init.headers);
 
   // Add Content-Type only when request has body, and only if caller didn't specify it.
-  if (init.body != null && !headers.has('content-type')) {
+  if (init.body && !headers.has('content-type')) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -45,17 +59,8 @@ export async function apiFetch<T>(
     throw err;
   }
 
-  // Fallback: try to extract common message fields
-  let message = text;
-  if (maybeJson !== null && typeof maybeJson === 'object') {
-    const obj = maybeJson as { message?: string; detail?: string; error?: string };
-    if (typeof obj.message === 'string') message = obj.message;
-    else if (typeof obj.detail === 'string') message = obj.detail;
-    else if (typeof obj.error === 'string') message = obj.error;
-  }
-  if (typeof message !== 'string' || message.length === 0) {
-    message = `HTTP ${res.status}`;
-  }
+  // Fallback: extract message from non-standard JSON/text
+  const message = extractMessage(maybeJson, text) || `HTTP ${res.status}`;
 
   throw {
     status: res.status,
