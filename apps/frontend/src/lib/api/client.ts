@@ -5,18 +5,17 @@ export async function apiFetch<T>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
-  // Content-Type は body がある場合のみ付与する
-  // 既に init.headers に Content-Type が指定されている場合はそれを尊重
-  const existingHeaders = init.headers as Record<string, string> | undefined;
-  const headers: Record<string, string> = existingHeaders ? { ...existingHeaders } : {};
-  
-  if (init.body && !headers['Content-Type'] && !headers['content-type']) {
-    headers['Content-Type'] = 'application/json';
+  // Normalize headers safely (init.headers can be Headers | string[][] | Record<string,string>)
+  const headers = new Headers(init.headers);
+
+  // Add Content-Type only when request has body, and only if caller didn't specify it.
+  if (init.body != null && !headers.has('content-type')) {
+    headers.set('Content-Type', 'application/json');
   }
 
   const res = await fetch(path, {
     ...init,
-    headers: Object.keys(headers).length > 0 ? headers : undefined,
+    headers,
     credentials: 'include',
     cache: 'no-store',
   });
@@ -34,6 +33,7 @@ export async function apiFetch<T>(
 
   if (res.ok) return maybeJson as T;
 
+  // TeamFlow standard error response (ErrorResponse)
   if (isErrorResponse(maybeJson)) {
     const err: ApiError = {
       status: res.status,
@@ -45,13 +45,15 @@ export async function apiFetch<T>(
     throw err;
   }
 
+  // Fallback: try to extract common message fields
   let message = text;
   if (maybeJson !== null && typeof maybeJson === 'object') {
-    const obj = maybeJson as { message?: string; detail?: string };
+    const obj = maybeJson as { message?: string; detail?: string; error?: string };
     if (typeof obj.message === 'string') message = obj.message;
     else if (typeof obj.detail === 'string') message = obj.detail;
+    else if (typeof obj.error === 'string') message = obj.error;
   }
-  if (typeof message !== 'string' || !message.length) {
+  if (typeof message !== 'string' || message.length === 0) {
     message = `HTTP ${res.status}`;
   }
 
