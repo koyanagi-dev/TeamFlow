@@ -42,8 +42,9 @@ export default function DevProjectsPage() {
 
       const data = JSON.parse(text) as Project;
       setCreateResult(data);
-    } catch (err: any) {
-      setCreateError(err.message ?? String(err));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setCreateError(message);
     } finally {
       setLoading(false);
     }
@@ -60,8 +61,9 @@ export default function DevProjectsPage() {
 
       const data = JSON.parse(text) as Project[];
       setProjects(data);
-    } catch (err: any) {
-      setListError(err.message ?? String(err));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setListError(message);
     } finally {
       setListLoading(false);
     }

@@ -26,7 +26,7 @@ export default async function ProjectsPage() {
 
   try {
     projects = await fetchProjects();
-  } catch (e) {
+  } catch {
     return (
       <div className="max-w-3xl mx-auto p-6">
         <h1 className="text-2xl font-bold mb-4">Projects</h1>

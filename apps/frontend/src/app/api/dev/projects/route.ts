@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       // JSON でなければそのままテキストで返す
       return new NextResponse(text, { status: res.status });
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error in /api/dev/projects:', err);
     return NextResponse.json(
       { message: 'Internal error in dev proxy' },

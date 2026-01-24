@@ -40,12 +40,23 @@ func main() {
 	listHandler := httphandler.NewListTaskHandler(listUC, time.Now, cursorSecret)
 	updateHandler := httphandler.NewUpdateTaskHandler(updateUC)
 
+	// /api/tasks の統合ハンドラ（POST と GET の両方を処理）
+	tasksHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			createHandler.ServeHTTP(w, r)
+		case http.MethodGet:
+			listHandler.ServeHTTP(w, r)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+
 	mux := http.NewServeMux()
 	
 	// API はすべて /api 配下
 	// POST /api/tasks と GET /api/tasks?projectId=xxx (旧API)
-	mux.Handle("/api/tasks", createHandler)
-	mux.Handle("/api/tasks", listHandler)
+	mux.Handle("/api/tasks", tasksHandler)
 	// GET /api/projects/{projectId}/tasks (新API)
 	mux.Handle("/api/projects/", listHandler)
 	// PATCH /api/tasks/{id}
