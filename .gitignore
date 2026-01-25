@@ -10,3 +10,5 @@ build
 diff/
 # sqlc generated (do not commit)
 apps/tasks/internal/infrastructure/task/sqlc/
+# Claude Code
+.claude/
