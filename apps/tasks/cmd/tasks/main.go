@@ -61,12 +61,16 @@ func main() {
 		path := strings.TrimPrefix(r.URL.Path, "/api/projects/")
 		parts := strings.Split(path, "/")
 
+		log.Printf("[projectTasksHandler] path=%s, parts=%v, method=%s", path, parts, r.Method)
+
 		if len(parts) < 2 || parts[1] != "tasks" {
+			log.Printf("[projectTasksHandler] invalid path format")
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		projectID := parts[0]
+		log.Printf("[projectTasksHandler] extracted projectID=%s", projectID)
 
 		switch r.Method {
 		case http.MethodGet:
@@ -77,14 +81,18 @@ func main() {
 			// パスから取得した projectId を body に追加して CreateTaskHandler に渡す
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
+				log.Printf("[projectTasksHandler] failed to read body: %v", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 			r.Body.Close()
 
+			log.Printf("[projectTasksHandler] original body: %s", string(body))
+
 			// JSON を map にデコードして projectId を追加
 			var reqMap map[string]interface{}
 			if err := json.Unmarshal(body, &reqMap); err != nil {
+				log.Printf("[projectTasksHandler] failed to unmarshal: %v", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -95,9 +103,12 @@ func main() {
 			// 新しい body を作成
 			newBody, err := json.Marshal(reqMap)
 			if err != nil {
+				log.Printf("[projectTasksHandler] failed to marshal: %v", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
+
+			log.Printf("[projectTasksHandler] modified body: %s", string(newBody))
 
 			// リクエストボディを差し替え
 			r.Body = io.NopCloser(strings.NewReader(string(newBody)))
@@ -125,10 +136,30 @@ func main() {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	// CORS ミドルウェア
+	corsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			origin = "*"
+		}
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		// Preflight request
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		mux.ServeHTTP(w, r)
+	})
+
 	addr := ":8081"
 	log.Printf("tasks service listening on %s", addr)
 
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, corsHandler); err != nil {
 		log.Fatal(err)
 	}
 }
