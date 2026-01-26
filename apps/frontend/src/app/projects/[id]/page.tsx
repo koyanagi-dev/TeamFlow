@@ -3,6 +3,7 @@ import { apiFetch } from '@/lib/api/client';
 import { normalizeApiError } from '@/lib/api/error';
 import { ValidationIssues } from '@/components/ValidationIssues';
 import type { ValidationIssue } from '@/lib/api/types';
+import { CreateTaskForm } from './CreateTaskForm';
 
 // Server-side: use process.env directly (not NEXT_PUBLIC_)
 const PROJECTS_BASE =
@@ -160,12 +161,11 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">Tasks</h2>
 
+        <CreateTaskForm projectId={id} />
+
         {tasks.length === 0 ? (
           <p className="text-sm text-gray-600">
-            このプロジェクトに紐づくタスクはまだありません。<br />
-            開発用ページ{' '}
-            <code className="px-1 py-0.5 bg-gray-100 rounded">/dev/tasks</code>{' '}
-            から projectId = {project.id} のタスクを作成してみてください。
+            タスクを作成すると、ここに表示されます。
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
