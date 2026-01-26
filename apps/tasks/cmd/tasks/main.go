@@ -61,16 +61,12 @@ func main() {
 		path := strings.TrimPrefix(r.URL.Path, "/api/projects/")
 		parts := strings.Split(path, "/")
 
-		log.Printf("[projectTasksHandler] path=%s, parts=%v, method=%s", path, parts, r.Method)
-
 		if len(parts) < 2 || parts[1] != "tasks" {
-			log.Printf("[projectTasksHandler] invalid path format")
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		projectID := parts[0]
-		log.Printf("[projectTasksHandler] extracted projectID=%s", projectID)
 
 		switch r.Method {
 		case http.MethodGet:
@@ -81,18 +77,14 @@ func main() {
 			// パスから取得した projectId を body に追加して CreateTaskHandler に渡す
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
-				log.Printf("[projectTasksHandler] failed to read body: %v", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 			r.Body.Close()
 
-			log.Printf("[projectTasksHandler] original body: %s", string(body))
-
 			// JSON を map にデコードして projectId を追加
 			var reqMap map[string]interface{}
 			if err := json.Unmarshal(body, &reqMap); err != nil {
-				log.Printf("[projectTasksHandler] failed to unmarshal: %v", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -103,12 +95,9 @@ func main() {
 			// 新しい body を作成
 			newBody, err := json.Marshal(reqMap)
 			if err != nil {
-				log.Printf("[projectTasksHandler] failed to marshal: %v", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-
-			log.Printf("[projectTasksHandler] modified body: %s", string(newBody))
 
 			// リクエストボディを差し替え
 			r.Body = io.NopCloser(strings.NewReader(string(newBody)))
