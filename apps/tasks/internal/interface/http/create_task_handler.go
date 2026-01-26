@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	domain "teamflow-tasks/internal/domain/task"
 	usecase "teamflow-tasks/internal/usecase/task"
 )
@@ -68,8 +70,14 @@ func (h *CreateTaskHandler) handleCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// ID が空の場合は UUID を自動生成
+	taskID := req.ID
+	if taskID == "" {
+		taskID = uuid.New().String()
+	}
+
 	in := usecase.CreateTaskInput{
-		ID:          req.ID,
+		ID:          taskID,
 		ProjectID:   req.ProjectID,
 		Title:       req.Title,
 		Description: req.Description,
