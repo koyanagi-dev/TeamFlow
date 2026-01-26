@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log"
@@ -100,7 +101,7 @@ func main() {
 			}
 
 			// リクエストボディを差し替え
-			r.Body = io.NopCloser(strings.NewReader(string(newBody)))
+			r.Body = io.NopCloser(bytes.NewReader(newBody))
 			r.ContentLength = int64(len(newBody))
 
 			createHandler.ServeHTTP(w, r)
@@ -127,16 +128,21 @@ func main() {
 
 	// CORS ミドルウェア
 	corsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			origin = "*"
+		allowedOrigins := map[string]bool{
+			"http://localhost:3000":   true,
+			"http://127.0.0.1:3000": true,
 		}
-		w.Header().Set("Access-Control-Allow-Origin", origin)
+
+		origin := r.Header.Get("Origin")
+		if allowedOrigins[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Vary", "Origin")
+		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
-		// Preflight request
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
