@@ -135,6 +135,27 @@ Claude Code が「勝手に決めてはいけないこと」:
 - Conventional Commits: `feat(tasks): ...`, `fix(frontend): ...`
 - **コミット本文（BODY）は日本語で書く**
 
+### Issue運用ルール
+
+**Issueを起票するときは必ず適切なIssueテンプレートを使用してください。**
+
+- PRタイトルに必ず Issue番号を含める
+  - 例：`feat: Projects→Tasks導線追加 (#XX)`
+- PR本文に `Closes #XX` を書く
+  - → マージ時にIssue自動クローズ
+- 作業ブランチ名も Issue番号ベースにすること
+  - 例：`feat/XX-projects-tasks-flow`
+
+### PR運用ルール
+
+**PRを作成するときは必ずPRテンプレートを使用してください。**
+
+- PR作成前に必ずIssueが存在する
+- PR本文の冒頭に `Closes #XX` を書く
+- ブランチ名に Issue番号を含める
+  - 例：`feat/XX-projects-tasks-flow`
+- IssueなしPRは原則作らない（ドキュメント系も含む）
+
 ---
 
 ## Definition of Done
