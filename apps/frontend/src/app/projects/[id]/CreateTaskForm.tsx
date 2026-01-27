@@ -45,8 +45,21 @@ export function CreateTaskForm({ projectId }: CreateTaskFormProps) {
       router.refresh();
     } catch (err) {
       const normalized = normalizeApiError(err);
+
+      // ネットワーク系エラー（接続不可/サービス未起動）をユーザー向けに変換
+      let userMessage = normalized.message;
+      const isNetworkError =
+        err instanceof TypeError ||
+        normalized.message.toLowerCase().includes('failed to fetch') ||
+        normalized.message.toLowerCase().includes('fetch failed') ||
+        normalized.message.toLowerCase().includes('network');
+
+      if (isNetworkError && !normalized.issues) {
+        userMessage = 'Tasksサービスに接続できません。起動しているか確認してください。';
+      }
+
       setError({
-        message: normalized.message,
+        message: userMessage,
         issues: normalized.issues,
       });
     } finally {
