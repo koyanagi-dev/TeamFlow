@@ -1,9 +1,9 @@
 package task
 
 type Patch[T any] struct {
-    IsSet  bool // 未指定=false
-    IsNull bool // null=true
-    Value  T
+	IsSet  bool // 未指定=false
+	IsNull bool // null=true
+	Value  T
 }
 
 func Unset[T any]() Patch[T]      { return Patch[T]{IsSet: false} }

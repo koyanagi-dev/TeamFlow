@@ -2,8 +2,8 @@ package taskinfra
 
 import (
 	"context"
-	"fmt"
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -273,4 +273,3 @@ func (r *SQLTaskRepository) buildOrderBy(query *domain.TaskQuery) []string {
 
 	return orderByParts
 }
-

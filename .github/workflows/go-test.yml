@@ -3,23 +3,23 @@ name: Go Test
 on:
   pull_request:
     paths:
-      - 'apps/**'
-      - 'Makefile'
-      - '.github/workflows/**'
-      - 'go.work'
-      - 'go.work.sum'
-      - 'go.mod'
-      - 'go.sum'
+      - "apps/**"
+      - "Makefile"
+      - ".github/workflows/**"
+      - "go.work"
+      - "go.work.sum"
+      - "go.mod"
+      - "go.sum"
   push:
-    branches: [ master ]
+    branches: [master]
     paths:
-      - 'apps/**'
-      - 'Makefile'
-      - '.github/workflows/**'
-      - 'go.work'
-      - 'go.work.sum'
-      - 'go.mod'
-      - 'go.sum'
+      - "apps/**"
+      - "Makefile"
+      - ".github/workflows/**"
+      - "go.work"
+      - "go.work.sum"
+      - "go.mod"
+      - "go.sum"
 
 jobs:
   go-test:
@@ -30,7 +30,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: "1.25.x"
           cache: true
 
       - name: Install sqlc
@@ -40,4 +40,3 @@ jobs:
 
       - name: sqlc generate + go test
         run: make go-test
-

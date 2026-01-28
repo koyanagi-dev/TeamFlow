@@ -10,5 +10,8 @@ build
 diff/
 # sqlc generated (do not commit)
 apps/tasks/internal/infrastructure/task/sqlc/
+# Go binaries
+apps/projects/projects
+apps/tasks/tasks
 # Claude Code
 .claude/

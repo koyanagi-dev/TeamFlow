@@ -139,3 +139,4 @@ Rollout Plan
 ・Phase 2（将来）
   ・updatedAt のサポート
   ・ASC/DESC のサポート（必要な場合のみ）
+```

@@ -11,8 +11,8 @@ import (
 
 	domain "teamflow-projects/internal/domain/project"
 	infra "teamflow-projects/internal/infrastructure/project"
-	usecase "teamflow-projects/internal/usecase/project"
 	httpiface "teamflow-projects/internal/interface/http"
+	usecase "teamflow-projects/internal/usecase/project"
 )
 
 func seedProject(repo *infra.MemoryProjectRepository, id string) *domain.Project {

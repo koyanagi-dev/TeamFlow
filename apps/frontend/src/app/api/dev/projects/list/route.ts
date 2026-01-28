@@ -1,13 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-const PROJECTS_SERVICE_BASE = 'http://localhost:8080';
+const PROJECTS_SERVICE_BASE = "http://localhost:8080";
 
 export async function GET() {
   try {
     const res = await fetch(`${PROJECTS_SERVICE_BASE}/projects`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
 
@@ -20,10 +20,7 @@ export async function GET() {
       return new NextResponse(text, { status: res.status });
     }
   } catch (err) {
-    console.error('Error in GET /api/dev/projects/list:', err);
-    return NextResponse.json(
-      { message: 'internal error in dev proxy' },
-      { status: 500 }
-    );
+    console.error("Error in GET /api/dev/projects/list:", err);
+    return NextResponse.json({ message: "internal error in dev proxy" }, { status: 500 });
   }
 }

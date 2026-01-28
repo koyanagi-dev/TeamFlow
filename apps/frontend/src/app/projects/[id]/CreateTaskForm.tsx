@@ -1,15 +1,14 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { apiFetch } from '@/lib/api/client';
-import { normalizeApiError } from '@/lib/api/error';
-import { ValidationIssues } from '@/components/ValidationIssues';
-import type { ValidationIssue } from '@/lib/api/types';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { apiFetch } from "@/lib/api/client";
+import { normalizeApiError } from "@/lib/api/error";
+import { ValidationIssues } from "@/components/ValidationIssues";
+import type { ValidationIssue } from "@/lib/api/types";
 
 // Client-side: use NEXT_PUBLIC_ prefix
-const TASKS_BASE =
-  process.env.NEXT_PUBLIC_TASKS_BASE ?? 'http://localhost:8081/api';
+const TASKS_BASE = process.env.NEXT_PUBLIC_TASKS_BASE ?? "http://localhost:8081/api";
 
 type CreateTaskFormProps = {
   projectId: string;
@@ -17,8 +16,8 @@ type CreateTaskFormProps = {
 
 export function CreateTaskForm({ projectId }: CreateTaskFormProps) {
   const router = useRouter();
-  const [title, setTitle] = useState('');
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [title, setTitle] = useState("");
+  const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<{
     message: string;
@@ -32,16 +31,16 @@ export function CreateTaskForm({ projectId }: CreateTaskFormProps) {
 
     try {
       await apiFetch(`${TASKS_BASE}/projects/${projectId}/tasks`, {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
           title,
           priority,
-          status: 'todo',
+          status: "todo",
         }),
       });
 
       // Success: reset title and refresh
-      setTitle('');
+      setTitle("");
       router.refresh();
     } catch (err) {
       const normalized = normalizeApiError(err);
@@ -50,12 +49,12 @@ export function CreateTaskForm({ projectId }: CreateTaskFormProps) {
       let userMessage = normalized.message;
       const isNetworkError =
         err instanceof TypeError ||
-        normalized.message.toLowerCase().includes('failed to fetch') ||
-        normalized.message.toLowerCase().includes('fetch failed') ||
-        normalized.message.toLowerCase().includes('network');
+        normalized.message.toLowerCase().includes("failed to fetch") ||
+        normalized.message.toLowerCase().includes("fetch failed") ||
+        normalized.message.toLowerCase().includes("network");
 
       if (isNetworkError && !normalized.issues) {
-        userMessage = 'Tasksサービスに接続できません。起動しているか確認してください。';
+        userMessage = "Tasksサービスに接続できません。起動しているか確認してください。";
       }
 
       setError({
@@ -68,7 +67,7 @@ export function CreateTaskForm({ projectId }: CreateTaskFormProps) {
   };
 
   return (
-    <div className="border rounded-xl p-4 bg-white shadow-sm space-y-3">
+    <div className="space-y-3 rounded-xl border bg-white p-4 shadow-sm">
       <h3 className="text-lg font-semibold">新しいタスクを作成</h3>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="space-y-1">
@@ -80,7 +79,7 @@ export function CreateTaskForm({ projectId }: CreateTaskFormProps) {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm"
+            className="w-full rounded-lg border px-3 py-2 text-sm"
             placeholder="タスクのタイトルを入力"
             disabled={isSubmitting}
           />
@@ -93,10 +92,8 @@ export function CreateTaskForm({ projectId }: CreateTaskFormProps) {
           <select
             id="priority"
             value={priority}
-            onChange={(e) =>
-              setPriority(e.target.value as 'low' | 'medium' | 'high')
-            }
-            className="w-full border rounded-lg px-3 py-2 text-sm"
+            onChange={(e) => setPriority(e.target.value as "low" | "medium" | "high")}
+            className="w-full rounded-lg border px-3 py-2 text-sm"
             disabled={isSubmitting}
           >
             <option value="low">low</option>
@@ -115,9 +112,9 @@ export function CreateTaskForm({ projectId }: CreateTaskFormProps) {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSubmitting ? '作成中...' : '作成'}
+          {isSubmitting ? "作成中..." : "作成"}
         </button>
       </form>
     </div>

@@ -14,9 +14,9 @@ type listRepo struct {
 	out []*domain.Project
 }
 
-func (r *listRepo) Save(context.Context, *domain.Project) error                  { return nil }
-func (r *listRepo) FindByID(context.Context, string) (*domain.Project, error)   { return nil, nil }
-func (r *listRepo) List(context.Context) ([]*domain.Project, error)             { return r.out, nil }
+func (r *listRepo) Save(context.Context, *domain.Project) error               { return nil }
+func (r *listRepo) FindByID(context.Context, string) (*domain.Project, error) { return nil, nil }
+func (r *listRepo) List(context.Context) ([]*domain.Project, error)           { return r.out, nil }
 
 func TestListProjects_Success(t *testing.T) {
 	now := time.Now()

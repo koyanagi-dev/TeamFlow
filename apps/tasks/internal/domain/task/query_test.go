@@ -296,11 +296,11 @@ func TestNewTaskQuery_Sort(t *testing.T) {
 
 func TestNewTaskQuery_DueDateRange(t *testing.T) {
 	tests := []struct {
-		name          string
-		dueDateFrom   string
-		dueDateTo     string
-		wantErr       bool
-		validateFunc  func(*testing.T, *TaskQuery)
+		name         string
+		dueDateFrom  string
+		dueDateTo    string
+		wantErr      bool
+		validateFunc func(*testing.T, *TaskQuery)
 	}{
 		{
 			name:        "valid range",
@@ -363,4 +363,3 @@ func TestNewTaskQuery_DueDateRange(t *testing.T) {
 		})
 	}
 }
-

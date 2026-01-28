@@ -7,11 +7,11 @@ import (
 
 func TestResolveCursorSecret(t *testing.T) {
 	tests := []struct {
-		name        string
-		appEnv      string
-		rawSecret   string
-		wantSecret  []byte
-		wantErr     bool
+		name       string
+		appEnv     string
+		rawSecret  string
+		wantSecret []byte
+		wantErr    bool
 	}{
 		// production cases
 		{

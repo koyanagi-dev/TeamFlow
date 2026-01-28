@@ -129,7 +129,7 @@ func main() {
 	// CORS ミドルウェア
 	corsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		allowedOrigins := map[string]bool{
-			"http://localhost:3000":   true,
+			"http://localhost:3000": true,
 			"http://127.0.0.1:3000": true,
 		}
 
@@ -154,7 +154,15 @@ func main() {
 	addr := ":8081"
 	log.Printf("tasks service listening on %s", addr)
 
-	if err := http.ListenAndServe(addr, corsHandler); err != nil {
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      corsHandler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

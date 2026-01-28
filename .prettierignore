@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+.next/
+dist/
+build/
+out/
+
+# Generated files
+apps/tasks/internal/infrastructure/task/sqlc/
+
+# Cache
+.turbo/
+.cache/
+
+# Misc
+.DS_Store
+*.log
+coverage/
+.idea/
+.vscode/
+*.swp
+*.swo

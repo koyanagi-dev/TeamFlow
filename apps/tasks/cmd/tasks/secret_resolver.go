@@ -6,6 +6,8 @@ import (
 )
 
 const placeholderSecret = "default-secret-change-in-production"
+
+// #nosec G101 -- これは本物のクレデンシャルではなく、開発環境のみで使用されるプレースホルダー
 const devDefaultSecret = "dev-only-secret-change-me"
 
 // resolveCursorSecret resolves CURSOR_SECRET based on environment.

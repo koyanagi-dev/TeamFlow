@@ -12,12 +12,12 @@ import (
 // 条件定義のみを担当し、実装詳細（フィルタリング・ソート・リミット処理）はリポジトリ層に委譲する。
 type TaskQuery struct {
 	// Filters
-	Statuses    []TaskStatus  // status フィルタ（doing -> in_progress 正規化済み）
-	AssigneeID  *string       // assigneeId フィルタ
+	Statuses    []TaskStatus   // status フィルタ（doing -> in_progress 正規化済み）
+	AssigneeID  *string        // assigneeId フィルタ
 	Priorities  []TaskPriority // priority フィルタ
-	DueDateFrom *time.Time    // dueDateFrom
-	DueDateTo   *time.Time    // dueDateTo
-	Query       *string       // q (title検索)
+	DueDateFrom *time.Time     // dueDateFrom
+	DueDateTo   *time.Time     // dueDateTo
+	Query       *string        // q (title検索)
 
 	// Sorting
 	SortOrders []SortOrder // sort パラメータからパース済み
@@ -380,4 +380,3 @@ func WithCursor(cursorStr string, projectID string, secret []byte, now time.Time
 		return nil
 	}
 }
-
