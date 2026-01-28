@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import { apiFetch } from '@/lib/api/client';
-import { normalizeApiError } from '@/lib/api/error';
-import { ValidationIssues } from '@/components/ValidationIssues';
-import type { ValidationIssue } from '@/lib/api/types';
+import { useEffect, useMemo, useState } from "react";
+import { apiFetch } from "@/lib/api/client";
+import { normalizeApiError } from "@/lib/api/error";
+import { ValidationIssues } from "@/components/ValidationIssues";
+import type { ValidationIssue } from "@/lib/api/types";
 
 type Task = {
   id: string;
@@ -19,12 +19,12 @@ type Task = {
 };
 
 function generateTaskId() {
-  return 'task-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+  return "task-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6);
 }
 
 function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () => void }) {
   // Map "in_progress" from API response to "doing" for UI
-  const normalizeStatus = (s: string) => s === 'in_progress' ? 'doing' : s;
+  const normalizeStatus = (s: string) => (s === "in_progress" ? "doing" : s);
 
   const [titleInput, setTitleInput] = useState<string>(task.title);
   const [statusInput, setStatusInput] = useState<string>(normalizeStatus(task.status));
@@ -48,7 +48,7 @@ function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () =>
 
     try {
       const body: { title?: string; status?: string; priority?: string } = {};
-      
+
       // 変更されたフィールドだけを追加
       if (titleInput !== task.title) {
         body.title = titleInput;
@@ -67,13 +67,10 @@ function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () =>
         return;
       }
 
-      await apiFetch<unknown>(
-        `/api/dev/tasks?id=${encodeURIComponent(task.id)}`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify(body),
-        }
-      );
+      await apiFetch<unknown>(`/api/dev/tasks?id=${encodeURIComponent(task.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
 
       onUpdateSuccess();
     } catch (err: unknown) {
@@ -83,19 +80,23 @@ function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () =>
     }
   };
 
-  const hasChanges = 
+  const hasChanges =
     titleInput !== task.title ||
     statusInput !== normalizeStatus(task.status) ||
     priorityInput !== task.priority;
 
   return (
-    <div className="text-sm border rounded-lg p-3 bg-gray-50 space-y-2">
-      <div><span className="font-medium">ID:</span> {task.id}</div>
-      <div><span className="font-medium">ProjectID:</span> {task.projectId}</div>
+    <div className="space-y-2 rounded-lg border bg-gray-50 p-3 text-sm">
+      <div>
+        <span className="font-medium">ID:</span> {task.id}
+      </div>
+      <div>
+        <span className="font-medium">ProjectID:</span> {task.projectId}
+      </div>
       <div className="flex items-center gap-2">
         <span className="font-medium">Title:</span>
         <input
-          className="flex-1 border rounded px-2 py-1 text-sm"
+          className="flex-1 rounded border px-2 py-1 text-sm"
           value={titleInput}
           onChange={(e) => setTitleInput(e.target.value)}
           disabled={updating}
@@ -104,7 +105,7 @@ function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () =>
       <div className="flex items-center gap-2">
         <span className="font-medium">Status:</span>
         <select
-          className="flex-1 border rounded px-2 py-1 text-sm bg-white"
+          className="flex-1 rounded border bg-white px-2 py-1 text-sm"
           value={statusInput}
           onChange={(e) => setStatusInput(e.target.value)}
           disabled={updating}
@@ -117,7 +118,7 @@ function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () =>
       <div className="flex items-center gap-2">
         <span className="font-medium">Priority:</span>
         <select
-          className="flex-1 border rounded px-2 py-1 text-sm bg-white"
+          className="flex-1 rounded border bg-white px-2 py-1 text-sm"
           value={priorityInput}
           onChange={(e) => setPriorityInput(e.target.value)}
           disabled={updating}
@@ -131,10 +132,10 @@ function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () =>
         <button
           type="button"
           onClick={handleUpdate}
-          disabled={updating || !hasChanges || titleInput.trim() === ''}
-          className="px-3 py-1 border rounded text-sm disabled:opacity-60 bg-white"
+          disabled={updating || !hasChanges || titleInput.trim() === ""}
+          className="rounded border bg-white px-3 py-1 text-sm disabled:opacity-60"
         >
-          {updating ? 'Updating...' : 'Update'}
+          {updating ? "Updating..." : "Update"}
         </button>
       </div>
       {updateError && (
@@ -149,11 +150,11 @@ function TaskRow({ task, onUpdateSuccess }: { task: Task; onUpdateSuccess: () =>
 
 export default function DevTasksPage() {
   const [id, setId] = useState<string>(generateTaskId());
-  const [projectId, setProjectId] = useState<string>('proj-1');
-  const [title, setTitle] = useState<string>('タスクのタイトル');
-  const [description, setDescription] = useState<string>('タスクの説明');
-  const [status, setStatus] = useState<string>('todo');
-  const [priority, setPriority] = useState<string>('medium');
+  const [projectId, setProjectId] = useState<string>("proj-1");
+  const [title, setTitle] = useState<string>("タスクのタイトル");
+  const [description, setDescription] = useState<string>("タスクの説明");
+  const [status, setStatus] = useState<string>("todo");
+  const [priority, setPriority] = useState<string>("medium");
 
   const [loading, setLoading] = useState(false);
   const [createError, setCreateError] = useState<{
@@ -176,9 +177,7 @@ export default function DevTasksPage() {
     setListError(null);
 
     try {
-      const data = await apiFetch<Task[]>(
-        `/api/dev/tasks?projectId=${encodeURIComponent(pid)}`
-      );
+      const data = await apiFetch<Task[]>(`/api/dev/tasks?projectId=${encodeURIComponent(pid)}`);
       setTasks(Array.isArray(data) ? data : []);
     } catch (err: unknown) {
       setListError(normalizeApiError(err));
@@ -199,8 +198,8 @@ export default function DevTasksPage() {
     setCreateError(null);
 
     try {
-      await apiFetch<unknown>('/api/dev/tasks', {
-        method: 'POST',
+      await apiFetch<unknown>("/api/dev/tasks", {
+        method: "POST",
         body: JSON.stringify({
           id,
           projectId,
@@ -221,47 +220,47 @@ export default function DevTasksPage() {
   };
 
   return (
-    <div className="max-w-xl mx-auto p-4 space-y-8">
+    <div className="mx-auto max-w-xl space-y-8 p-4">
       <h1 className="text-2xl font-bold">Dev: Tasks</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-3 border rounded-lg p-4">
+      <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border p-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Task ID</label>
+          <label className="mb-1 block text-sm font-medium">Task ID</label>
           <input
-            className="w-full border rounded px-2 py-1 text-sm"
+            className="w-full rounded border px-2 py-1 text-sm"
             value={id}
             onChange={(e) => setId(e.target.value)}
           />
-          <p className="text-[11px] text-gray-500 mt-1">
+          <p className="mt-1 text-[11px] text-gray-500">
             開発用フォームのため、送信成功時に自動で新しい ID が採番されます。
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Project ID</label>
+          <label className="mb-1 block text-sm font-medium">Project ID</label>
           <input
-            className="w-full border rounded px-2 py-1 text-sm"
+            className="w-full rounded border px-2 py-1 text-sm"
             value={projectId}
             onChange={(e) => setProjectId(e.target.value)}
           />
-          <p className="text-[11px] text-gray-500 mt-1">
+          <p className="mt-1 text-[11px] text-gray-500">
             入力した Project ID のタスク一覧を自動で取得して表示します。
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Title</label>
+          <label className="mb-1 block text-sm font-medium">Title</label>
           <input
-            className="w-full border rounded px-2 py-1 text-sm"
+            className="w-full rounded border px-2 py-1 text-sm"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Description</label>
+          <label className="mb-1 block text-sm font-medium">Description</label>
           <textarea
-            className="w-full border rounded px-2 py-1 text-sm"
+            className="w-full rounded border px-2 py-1 text-sm"
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -270,17 +269,17 @@ export default function DevTasksPage() {
 
         <div className="flex gap-3">
           <div className="flex-1">
-            <label className="block text-sm font-medium mb-1">Status</label>
+            <label className="mb-1 block text-sm font-medium">Status</label>
             <input
-              className="w-full border rounded px-2 py-1 text-sm"
+              className="w-full rounded border px-2 py-1 text-sm"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             />
           </div>
           <div className="flex-1">
-            <label className="block text-sm font-medium mb-1">Priority</label>
+            <label className="mb-1 block text-sm font-medium">Priority</label>
             <input
-              className="w-full border rounded px-2 py-1 text-sm"
+              className="w-full rounded border px-2 py-1 text-sm"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
             />
@@ -291,18 +290,18 @@ export default function DevTasksPage() {
           <button
             type="submit"
             disabled={loading}
-            className="px-4 py-2 border rounded text-sm disabled:opacity-60"
+            className="rounded border px-4 py-2 text-sm disabled:opacity-60"
           >
-            {loading ? 'Sending...' : 'Create Task'}
+            {loading ? "Sending..." : "Create Task"}
           </button>
 
           <button
             type="button"
             onClick={() => void fetchTasks(projectId.trim())}
             disabled={listLoading || !projectId.trim()}
-            className="px-4 py-2 border rounded text-sm disabled:opacity-60"
+            className="rounded border px-4 py-2 text-sm disabled:opacity-60"
           >
-            {listLoading ? 'Loading...' : 'Refresh List'}
+            {listLoading ? "Loading..." : "Refresh List"}
           </button>
         </div>
       </form>
@@ -324,25 +323,21 @@ export default function DevTasksPage() {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">
-            Tasks for <span className="font-mono">{projectIdForFetch || '(empty)'}</span>
+            Tasks for <span className="font-mono">{projectIdForFetch || "(empty)"}</span>
           </h2>
           <span className="text-xs text-gray-500">
-            {listLoading ? 'loading...' : `${tasks.length} item(s)`}
+            {listLoading ? "loading..." : `${tasks.length} item(s)`}
           </span>
         </div>
 
         {tasks.length === 0 && !listLoading && !listError && (
-          <div className="text-sm text-gray-600 border rounded-lg p-3">
+          <div className="rounded-lg border p-3 text-sm text-gray-600">
             タスクはありません（または projectId が不正です）
           </div>
         )}
 
         {tasks.map((t) => (
-          <TaskRow
-            key={t.id}
-            task={t}
-            onUpdateSuccess={() => void fetchTasks(projectIdForFetch)}
-          />
+          <TaskRow key={t.id} task={t} onUpdateSuccess={() => void fetchTasks(projectIdForFetch)} />
         ))}
       </div>
     </div>

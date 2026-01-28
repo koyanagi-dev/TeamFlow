@@ -25,26 +25,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AuthSignupRequest'
+              $ref: "#/components/schemas/AuthSignupRequest"
       responses:
-        '201':
+        "201":
           description: ユーザー登録成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '400':
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
           description: バリデーションエラーなど
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '409':
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
           description: email が既に存在
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/auth/login:
     post:
@@ -55,9 +55,9 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AuthLoginRequest'
+              $ref: "#/components/schemas/AuthLoginRequest"
       responses:
-        '200':
+        "200":
           description: ログイン成功（クッキーにセッションID付与）
           headers:
             Set-Cookie:
@@ -67,13 +67,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
           description: 認証失敗
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/auth/logout:
     post:
@@ -82,7 +82,7 @@ paths:
       security:
         - cookieAuth: []
       responses:
-        '204':
+        "204":
           description: ログアウト成功（クッキー破棄）
 
   /api/auth/refresh:
@@ -92,18 +92,18 @@ paths:
       security:
         - cookieAuth: []
       responses:
-        '200':
+        "200":
           description: 更新後のユーザー情報（必要に応じて）
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
           description: リフレッシュ不可
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/auth/me:
     get:
@@ -112,18 +112,18 @@ paths:
       security:
         - cookieAuth: []
       responses:
-        '200':
+        "200":
           description: ログインユーザー情報
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '401':
+                $ref: "#/components/schemas/User"
+        "401":
           description: 未ログイン
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ===========================
   # Projects
@@ -135,7 +135,7 @@ paths:
       security:
         - cookieAuth: []
       responses:
-        '200':
+        "200":
           description: プロジェクト一覧
           content:
             application/json:
@@ -145,7 +145,7 @@ paths:
                   projects:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Project'
+                      $ref: "#/components/schemas/Project"
     post:
       summary: 新規プロジェクト作成
       tags: [Projects]
@@ -156,26 +156,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProjectCreateRequest'
+              $ref: "#/components/schemas/ProjectCreateRequest"
       responses:
-        '201':
+        "201":
           description: 作成されたプロジェクト
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Project'
-        '400':
+                $ref: "#/components/schemas/Project"
+        "400":
           description: バリデーションエラー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
           description: 内部サーバーエラー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/projects/{projectId}:
     get:
@@ -192,18 +192,18 @@ paths:
             type: string
             format: uuid
       responses:
-        '200':
+        "200":
           description: プロジェクト詳細
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Project'
-        '404':
+                $ref: "#/components/schemas/Project"
+        "404":
           description: 見つからない or 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     patch:
       summary: プロジェクトの更新
       description: owner / admin のみ許可
@@ -222,38 +222,38 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProjectUpdateRequest'
+              $ref: "#/components/schemas/ProjectUpdateRequest"
       responses:
-        '200':
+        "200":
           description: 更新後のプロジェクト
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Project'
-        '400':
+                $ref: "#/components/schemas/Project"
+        "400":
           description: バリデーションエラー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
           description: 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
           description: プロジェクトが存在しない
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
           description: 内部サーバーエラー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ===========================
   # Project Members & Invitations
@@ -272,7 +272,7 @@ paths:
             type: string
             format: uuid
       responses:
-        '200':
+        "200":
           description: メンバー一覧
           content:
             application/json:
@@ -282,13 +282,13 @@ paths:
                   members:
                     type: array
                     items:
-                      $ref: '#/components/schemas/ProjectMember'
-        '403':
+                      $ref: "#/components/schemas/ProjectMember"
+        "403":
           description: 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       summary: 既存ユーザーをメンバーとして追加
       description: email または userId で追加する想定
@@ -307,26 +307,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProjectMemberAddRequest'
+              $ref: "#/components/schemas/ProjectMemberAddRequest"
       responses:
-        '201':
+        "201":
           description: 追加されたメンバー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProjectMember'
-        '400':
+                $ref: "#/components/schemas/ProjectMember"
+        "400":
           description: バリデーションエラー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
           description: 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/projects/{projectId}/members/{userId}:
     patch:
@@ -352,20 +352,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProjectMemberUpdateRoleRequest'
+              $ref: "#/components/schemas/ProjectMemberUpdateRoleRequest"
       responses:
-        '200':
+        "200":
           description: 更新後のメンバー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProjectMember'
-        '403':
+                $ref: "#/components/schemas/ProjectMember"
+        "403":
           description: 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       summary: メンバー削除
       tags: [Members]
@@ -385,14 +385,14 @@ paths:
             type: string
             format: uuid
       responses:
-        '204':
+        "204":
           description: 削除成功
-        '403':
+        "403":
           description: 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/projects/{projectId}/invitations:
     post:
@@ -412,20 +412,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InvitationCreateRequest'
+              $ref: "#/components/schemas/InvitationCreateRequest"
       responses:
-        '201':
+        "201":
           description: 作成された招待
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Invitation'
-        '403':
+                $ref: "#/components/schemas/Invitation"
+        "403":
           description: 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/invitations/{token}:
     get:
@@ -438,18 +438,18 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: 有効な招待
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Invitation'
-        '404':
+                $ref: "#/components/schemas/Invitation"
+        "404":
           description: 無効 or 期限切れ
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       summary: 招待の受諾（メンバーとして参加）
       tags: [Invitations]
@@ -462,24 +462,24 @@ paths:
           schema:
             type: string
       responses:
-        '201':
+        "201":
           description: 参加後のプロジェクトメンバー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProjectMember'
-        '400':
+                $ref: "#/components/schemas/ProjectMember"
+        "400":
           description: 既に参加済みなど
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
           description: 無効 or 期限切れ
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ===========================
   # Tasks
@@ -577,7 +577,7 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: タスク一覧
           content:
             application/json:
@@ -587,7 +587,7 @@ paths:
                   tasks:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Task'
+                      $ref: "#/components/schemas/Task"
                   page:
                     type: object
                     description: ページング情報
@@ -603,12 +603,12 @@ paths:
                         description: 取得件数の上限（リクエストで指定された limit 値）
                     required: [nextCursor, limit]
                 required: [tasks]
-        '400':
+        "400":
           description: クエリパラメータのバリデーションエラー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       summary: タスク作成
       tags: [Tasks]
@@ -626,32 +626,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TaskCreateRequest'
+              $ref: "#/components/schemas/TaskCreateRequest"
       responses:
-        '201':
+        "201":
           description: 作成されたタスク
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Task'
-        '400':
+                $ref: "#/components/schemas/Task"
+        "400":
           description: バリデーションエラー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
           description: プロジェクトに対する権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
           description: 内部サーバーエラー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/tasks/{taskId}:
     get:
@@ -665,18 +665,18 @@ paths:
             type: string
             format: uuid
       responses:
-        '200':
+        "200":
           description: タスク詳細
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Task'
-        '404':
+                $ref: "#/components/schemas/Task"
+        "404":
           description: タスクが存在しない or 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     patch:
       summary: タスク更新（タイトル/説明/ステータス/期限など）
       tags: [Tasks]
@@ -694,32 +694,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TaskUpdateRequest'
+              $ref: "#/components/schemas/TaskUpdateRequest"
       responses:
-        '200':
+        "200":
           description: 更新後のタスク
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Task'
-        '400':
+                $ref: "#/components/schemas/Task"
+        "400":
           description: バリデーションエラー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
           description: 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
           description: タスクが存在しない
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/tasks/{taskId}/move:
     patch:
@@ -739,32 +739,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TaskMoveRequest'
+              $ref: "#/components/schemas/TaskMoveRequest"
       responses:
-        '200':
+        "200":
           description: 移動後のタスク
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Task'
-        '400':
+                $ref: "#/components/schemas/Task"
+        "400":
           description: 不正なステータス or 並び順
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
           description: 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
           description: タスクが存在しない
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ===========================
   # Comments
@@ -781,7 +781,7 @@ paths:
             type: string
             format: uuid
       responses:
-        '200':
+        "200":
           description: コメント一覧
           content:
             application/json:
@@ -791,7 +791,7 @@ paths:
                   comments:
                     type: array
                     items:
-                      $ref: '#/components/schemas/TaskComment'
+                      $ref: "#/components/schemas/TaskComment"
     post:
       summary: コメント追加
       tags: [Comments]
@@ -809,14 +809,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TaskCommentCreateRequest'
+              $ref: "#/components/schemas/TaskCommentCreateRequest"
       responses:
-        '201':
+        "201":
           description: 作成されたコメント
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskComment'
+                $ref: "#/components/schemas/TaskComment"
 
   /api/comments/{commentId}:
     patch:
@@ -836,20 +836,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TaskCommentUpdateRequest'
+              $ref: "#/components/schemas/TaskCommentUpdateRequest"
       responses:
-        '200':
+        "200":
           description: 更新後のコメント
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskComment'
-        '403':
+                $ref: "#/components/schemas/TaskComment"
+        "403":
           description: 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       summary: コメント削除
       tags: [Comments]
@@ -863,14 +863,14 @@ paths:
             type: string
             format: uuid
       responses:
-        '204':
+        "204":
           description: 削除成功
-        '403':
+        "403":
           description: 権限なし
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ===========================
   # Labels
@@ -889,7 +889,7 @@ paths:
             type: string
             format: uuid
       responses:
-        '200':
+        "200":
           description: ラベル一覧
           content:
             application/json:
@@ -899,7 +899,7 @@ paths:
                   labels:
                     type: array
                     items:
-                      $ref: '#/components/schemas/TaskLabel'
+                      $ref: "#/components/schemas/TaskLabel"
     post:
       summary: ラベル作成
       tags: [Labels]
@@ -917,14 +917,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TaskLabelCreateRequest'
+              $ref: "#/components/schemas/TaskLabelCreateRequest"
       responses:
-        '201':
+        "201":
           description: 作成されたラベル
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskLabel'
+                $ref: "#/components/schemas/TaskLabel"
 
   /api/projects/{projectId}/labels/{labelId}:
     patch:
@@ -950,14 +950,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TaskLabelUpdateRequest'
+              $ref: "#/components/schemas/TaskLabelUpdateRequest"
       responses:
-        '200':
+        "200":
           description: 更新後のラベル
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskLabel'
+                $ref: "#/components/schemas/TaskLabel"
     delete:
       summary: ラベル削除
       tags: [Labels]
@@ -977,7 +977,7 @@ paths:
             type: string
             format: uuid
       responses:
-        '204':
+        "204":
           description: 削除成功
 
   /api/tasks/{taskId}/labels/{labelId}:
@@ -1000,7 +1000,7 @@ paths:
             type: string
             format: uuid
       responses:
-        '204':
+        "204":
           description: 付与成功
     delete:
       summary: タスクからラベル解除
@@ -1021,7 +1021,7 @@ paths:
             type: string
             format: uuid
       responses:
-        '204':
+        "204":
           description: 解除成功
 
 components:
@@ -1087,7 +1087,7 @@ components:
               type: array
               description: バリデーションエラーの詳細（複数件）
               items:
-                $ref: '#/components/schemas/ValidationIssue'
+                $ref: "#/components/schemas/ValidationIssue"
       required: [error, message]
 
     # -------- User --------
@@ -1137,7 +1137,7 @@ components:
       type: object
       properties:
         user:
-          $ref: '#/components/schemas/User'
+          $ref: "#/components/schemas/User"
 
     # -------- Project --------
     Project:
@@ -1315,7 +1315,7 @@ components:
           type: string
           format: date-time
         user:
-          $ref: '#/components/schemas/User'
+          $ref: "#/components/schemas/User"
       required: [projectId, userId, role, joinedAt]
 
     ProjectMemberAddRequest:
@@ -1406,7 +1406,7 @@ components:
           type: string
           format: date-time
         author:
-          $ref: '#/components/schemas/User'
+          $ref: "#/components/schemas/User"
       required:
         - id
         - taskId

@@ -1,4 +1,5 @@
 .PHONY: openapi-validate openapi-diff go-test sqlc-generate db-test-up db-test-down test-integration
+.PHONY: lint-go format-go build-go check-go check-frontend check-all
 
 OPENAPI_FILE := docs/api/teamflow-openapi.yaml
 
@@ -61,3 +62,50 @@ test-integration:
 	cd apps/tasks && \
 	DB_TEST_DSN="postgres://teamflow:teamflow@localhost:15432/teamflow_tasks_test?sslmode=disable" \
 	go test -tags=integration ./... -count=1 -p 1
+
+# Go lint and format
+lint-go:
+	@echo "Running golangci-lint..."
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "✗ golangci-lint not found. Install it with:"; \
+		echo "  go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+		echo "  export PATH=\"\$$PATH:\$$(go env GOPATH)/bin\""; \
+		exit 127; \
+	fi
+	@cd apps/projects && golangci-lint run ./...
+	@cd apps/tasks && golangci-lint run ./...
+	@echo "✓ Go lint passed"
+
+format-go:
+	@echo "Formatting Go code..."
+	@if ! command -v goimports >/dev/null 2>&1; then \
+		echo "✗ goimports not found. Install it with:"; \
+		echo "  go install golang.org/x/tools/cmd/goimports@latest"; \
+		echo "  export PATH=\"\$$PATH:\$$(go env GOPATH)/bin\""; \
+		exit 127; \
+	fi
+	@cd apps/projects && goimports -w -local github.com/kumityou/teamflow .
+	@cd apps/projects && go fmt ./...
+	@cd apps/tasks && goimports -w -local github.com/kumityou/teamflow .
+	@cd apps/tasks && go fmt ./...
+	@echo "✓ Go code formatted"
+
+build-go:
+	@echo "Building Go services..."
+	@cd apps/projects && go build -v ./cmd/...
+	@cd apps/tasks && go build -v ./cmd/...
+	@echo "✓ Go build succeeded"
+
+# Integrated checks
+check-go: lint-go build-go go-test
+	@echo "✓ All Go checks passed"
+
+check-frontend:
+	@echo "Running Frontend checks..."
+	@pnpm format:check
+	@pnpm lint
+	@pnpm build
+	@echo "✓ All Frontend checks passed"
+
+check-all: openapi-validate check-go check-frontend
+	@echo "✓ All checks passed"

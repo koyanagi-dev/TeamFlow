@@ -30,8 +30,8 @@ func main() {
 	updateHandler := httphandler.NewUpdateProjectHandler(updateUC, time.Now)
 
 	mux := http.NewServeMux()
-	mux.Handle("/projects", projectHandler)   // POST /projects, GET /projects
-	mux.Handle("/projects/", updateHandler)   // PUT /projects/{id}
+	mux.Handle("/projects", projectHandler) // POST /projects, GET /projects
+	mux.Handle("/projects/", updateHandler) // PUT /projects/{id}
 
 	// ヘルスチェック
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +42,15 @@ func main() {
 	addr := ":8080"
 	log.Printf("projects service listening on %s", addr)
 
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

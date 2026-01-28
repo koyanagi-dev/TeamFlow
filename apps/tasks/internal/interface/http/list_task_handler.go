@@ -20,8 +20,8 @@ import (
 //   - カーソルページネーションの場合はnextCursorを計算してレスポンスに含める
 //   - 取得したタスク一覧をJSONレスポンスとして返す
 type ListTaskHandler struct {
-	listUC      *usecase.ListTasksByProjectUsecase
-	nowFunc     func() time.Time
+	listUC       *usecase.ListTasksByProjectUsecase
+	nowFunc      func() time.Time
 	cursorSecret []byte
 }
 
@@ -32,8 +32,8 @@ func NewListTaskHandler(
 	cursorSecret []byte,
 ) http.Handler {
 	return &ListTaskHandler{
-		listUC:      listUC,
-		nowFunc:     nowFunc,
+		listUC:       listUC,
+		nowFunc:      nowFunc,
 		cursorSecret: cursorSecret,
 	}
 }

@@ -1,0 +1,73 @@
+name: Go Lint & Build
+
+on:
+  pull_request:
+    paths:
+      - "apps/projects/**/*.go"
+      - "apps/tasks/**/*.go"
+      - "apps/**/go.mod"
+      - "apps/**/go.sum"
+      - ".golangci.yml"
+      - ".github/workflows/go-lint.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "apps/projects/**/*.go"
+      - "apps/tasks/**/*.go"
+      - "apps/**/go.mod"
+      - "apps/**/go.sum"
+      - ".golangci.yml"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "apps/tasks/go.mod"
+          cache-dependency-path: |
+            apps/tasks/go.sum
+            apps/projects/go.sum
+
+      - name: golangci-lint (projects)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: apps/projects
+          args: --timeout=5m
+
+      - name: golangci-lint (tasks)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: apps/tasks
+          args: --timeout=5m
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "apps/tasks/go.mod"
+          cache-dependency-path: |
+            apps/tasks/go.sum
+            apps/projects/go.sum
+
+      - name: Build projects service
+        working-directory: apps/projects
+        run: go build -v ./cmd/...
+
+      - name: Build tasks service
+        working-directory: apps/tasks
+        run: go build -v ./cmd/...

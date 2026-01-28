@@ -1,5 +1,5 @@
 export type ValidationIssue = {
-  location?: 'query' | 'path' | 'body';
+  location?: "query" | "path" | "body";
   field: string;
   code: string;
   message: string;

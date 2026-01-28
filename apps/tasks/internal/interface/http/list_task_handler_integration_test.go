@@ -42,7 +42,7 @@ func TestTaskHandler_CursorPagination_FirstPageReturnsNextCursor(t *testing.T) {
 	testutil.InsertTasks(t, db, []testutil.SeedTask{
 		{ID: testID + "-001", ProjectID: "proj-1", Title: "T1", Status: "todo", Priority: "high", CreatedAt: base.Add(1 * time.Microsecond), UpdatedAt: base.Add(1 * time.Microsecond)},
 		{ID: testID + "-002", ProjectID: "proj-1", Title: "T2", Status: "todo", Priority: "medium", CreatedAt: base.Add(2 * time.Microsecond), UpdatedAt: base.Add(2 * time.Microsecond)},
-		{ID: testID + "-003", ProjectID: "proj-1", Title: "T3", Status: "todo", Priority: "low", CreatedAt: base, UpdatedAt: base}, // 同じcreatedAt
+		{ID: testID + "-003", ProjectID: "proj-1", Title: "T3", Status: "todo", Priority: "low", CreatedAt: base, UpdatedAt: base},  // 同じcreatedAt
 		{ID: testID + "-004", ProjectID: "proj-1", Title: "T4", Status: "todo", Priority: "high", CreatedAt: base, UpdatedAt: base}, // 同じcreatedAt
 		{ID: testID + "-005", ProjectID: "proj-1", Title: "T5", Status: "todo", Priority: "medium", CreatedAt: base.Add(3 * time.Microsecond), UpdatedAt: base.Add(3 * time.Microsecond)},
 	})
@@ -118,7 +118,7 @@ func TestTaskHandler_CursorPagination_FirstPageReturnsNextCursor(t *testing.T) {
 
 		nextCursor = resp.Page.NextCursor
 		pageNum++
-		
+
 		// 無限ループ防止（最大10ページまで）
 		if pageNum > 10 {
 			t.Fatalf("too many pages, possible infinite loop")

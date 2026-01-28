@@ -1,15 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-const PROJECTS_SERVICE_BASE = 'http://localhost:8080';
+const PROJECTS_SERVICE_BASE = "http://localhost:8080";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
     const res = await fetch(`${PROJECTS_SERVICE_BASE}/projects`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       // そのまま透過
       body: JSON.stringify(body),
@@ -26,10 +26,7 @@ export async function POST(req: NextRequest) {
       return new NextResponse(text, { status: res.status });
     }
   } catch (err: unknown) {
-    console.error('Error in /api/dev/projects:', err);
-    return NextResponse.json(
-      { message: 'Internal error in dev proxy' },
-      { status: 500 },
-    );
+    console.error("Error in /api/dev/projects:", err);
+    return NextResponse.json({ message: "Internal error in dev proxy" }, { status: 500 });
   }
 }

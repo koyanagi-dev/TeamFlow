@@ -132,9 +132,8 @@ func TestCreateProject_EmptyName(t *testing.T) {
 		t.Fatalf("expected error for empty name, got nil")
 	}
 
-	if p == nil {
-		// p は nil のままで OK
-	}
+	// p は nil のままで OK なので特にチェック不要
+	_ = p
 
 	if repo.saved != nil {
 		t.Fatalf("expected repo.saved to be nil when validation fails")

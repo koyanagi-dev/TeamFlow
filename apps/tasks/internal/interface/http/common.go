@@ -55,6 +55,8 @@ func (ns *nullableString) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// toPtr は将来の拡張用に残しているが、現在は未使用
+// nolint:unused
 func (ns *nullableString) toPtr() *string {
 	if !ns.present {
 		return nil // 未指定
