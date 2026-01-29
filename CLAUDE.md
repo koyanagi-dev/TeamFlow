@@ -97,6 +97,7 @@ bash scripts/setup-precommit.sh
 ```
 
 pre-commitは以下を自動実行します：
+
 - Prettier（コードフォーマット）
 - gitleaks（シークレット検出）
 - 基本ファイルチェック（trailing whitespace、YAML構文など）

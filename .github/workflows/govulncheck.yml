@@ -3,21 +3,21 @@ name: Go Vulnerability Check
 on:
   pull_request:
     paths:
-      - 'apps/projects/**/*.go'
-      - 'apps/tasks/**/*.go'
-      - 'apps/**/go.mod'
-      - 'apps/**/go.sum'
-      - '.github/workflows/govulncheck.yml'
+      - "apps/projects/**/*.go"
+      - "apps/tasks/**/*.go"
+      - "apps/**/go.mod"
+      - "apps/**/go.sum"
+      - ".github/workflows/govulncheck.yml"
   push:
     branches:
       - master
     paths:
-      - 'apps/projects/**/*.go'
-      - 'apps/tasks/**/*.go'
-      - 'apps/**/go.mod'
-      - 'apps/**/go.sum'
+      - "apps/projects/**/*.go"
+      - "apps/tasks/**/*.go"
+      - "apps/**/go.mod"
+      - "apps/**/go.sum"
   schedule:
-    - cron: '0 4 * * 1'  # 毎週月曜 4:00 UTC
+    - cron: "0 4 * * 1" # 毎週月曜 4:00 UTC
 
 jobs:
   govulncheck:
@@ -30,7 +30,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: 'apps/tasks/go.mod'
+          go-version-file: "apps/tasks/go.mod"
           cache: true
 
       - name: Install govulncheck

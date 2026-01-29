@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [master]
   schedule:
-    - cron: '0 3 * * 0'  # 毎週日曜 3:00 UTC
+    - cron: "0 3 * * 0" # 毎週日曜 3:00 UTC
 
 jobs:
   analyze:
@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ['go', 'javascript-typescript']
+        language: ["go", "javascript-typescript"]
 
     steps:
       - name: Checkout repository
