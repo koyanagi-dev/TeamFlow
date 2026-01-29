@@ -88,6 +88,39 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 pnpm install
 ```
 
+### Pre-commit Hooks（必須）
+
+初回セットアップ時に必ず以下を実行：
+
+```bash
+bash scripts/setup-precommit.sh
+```
+
+pre-commitは以下を自動実行します：
+
+- Prettier（コードフォーマット）
+- gitleaks（シークレット検出）
+- 基本ファイルチェック（trailing whitespace、YAML構文など）
+
+コミット時に自動実行されます。必要時は `git commit --no-verify` で回避可能ですが、CIでブロックされる可能性があります。
+
+### Security Tools
+
+```bash
+# govulncheck（Go脆弱性チェック）
+go install golang.org/x/vuln/cmd/govulncheck@latest
+make govulncheck
+
+# pnpm audit（npm依存関係脆弱性）
+pnpm audit
+
+# trivy（オプション、手動実行推奨）
+brew install aquasecurity/trivy/trivy
+trivy fs . --config trivy.yaml
+```
+
+trivyは包括的だがノイズが多いため、定期的な手動実行を推奨。週次CIでも実行されるが、結果は参考情報として扱う。
+
 ---
 
 ## Architecture
@@ -249,3 +282,4 @@ Claude Code が「勝手に決めてはいけないこと」:
 - 迷ったら確認する（独断しない）
 - 大きめの変更は「選択肢 + 推奨 + 理由 + リスク」で相談する
 - 変更提案は "最小差分" を優先する（MVP速度重視）
+- **Claude Codeは常に日本語で回答する**（コード内コメントを除く）
