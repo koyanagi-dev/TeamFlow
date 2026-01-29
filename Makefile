@@ -1,5 +1,6 @@
 .PHONY: openapi-validate openapi-diff go-test sqlc-generate db-test-up db-test-down test-integration
 .PHONY: lint-go format-go build-go check-go check-frontend check-all
+.PHONY: audit-npm govulncheck
 
 OPENAPI_FILE := docs/api/teamflow-openapi.yaml
 
@@ -109,3 +110,20 @@ check-frontend:
 
 check-all: openapi-validate check-go check-frontend
 	@echo "✓ All checks passed"
+
+# Security checks
+audit-npm:
+	@echo "Running pnpm audit (high/critical)..."
+	@pnpm audit --audit-level=high --prod
+	@echo "✓ pnpm audit passed"
+
+govulncheck:
+	@echo "Running govulncheck..."
+	@if ! command -v govulncheck >/dev/null 2>&1; then \
+		echo "✗ govulncheck not found. Install it with:"; \
+		echo "  go install golang.org/x/vuln/cmd/govulncheck@latest"; \
+		exit 127; \
+	fi
+	@cd apps/projects && govulncheck ./...
+	@cd apps/tasks && govulncheck ./...
+	@echo "✓ govulncheck passed"

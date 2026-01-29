@@ -1,0 +1,30 @@
+title = "TeamFlow gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+description = "Detected OpenAI API Key"
+id = "openai-api-key"
+regex = '''sk-[a-zA-Z0-9]{20,}'''
+keywords = ["sk-"]
+
+[[rules]]
+description = "Detected AWS Access Key ID"
+id = "aws-access-key"
+regex = '''AKIA[0-9A-Z]{16}'''
+keywords = ["AKIA"]
+
+[[rules]]
+description = "Generic Secret Pattern"
+id = "generic-secret"
+regex = '''(?i)(password|passwd|pwd|secret|token|api_key|apikey)\s*[:=]\s*['"]?[a-zA-Z0-9_\-]{8,}['"]?'''
+keywords = ["password", "secret", "token", "api_key"]
+
+[allowlist]
+description = "Allowlist for false positives"
+paths = [
+    '''^\.git/''',
+    '''pnpm-lock\.yaml$''',
+    '''go\.sum$'''
+]

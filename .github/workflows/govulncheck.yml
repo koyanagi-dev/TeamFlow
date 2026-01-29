@@ -1,0 +1,45 @@
+name: Go Vulnerability Check
+
+on:
+  pull_request:
+    paths:
+      - 'apps/projects/**/*.go'
+      - 'apps/tasks/**/*.go'
+      - 'apps/**/go.mod'
+      - 'apps/**/go.sum'
+      - '.github/workflows/govulncheck.yml'
+  push:
+    branches:
+      - master
+    paths:
+      - 'apps/projects/**/*.go'
+      - 'apps/tasks/**/*.go'
+      - 'apps/**/go.mod'
+      - 'apps/**/go.sum'
+  schedule:
+    - cron: '0 4 * * 1'  # 毎週月曜 4:00 UTC
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'apps/tasks/go.mod'
+          cache: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck (projects)
+        working-directory: apps/projects
+        run: govulncheck ./...
+
+      - name: Run govulncheck (tasks)
+        working-directory: apps/tasks
+        run: govulncheck ./...

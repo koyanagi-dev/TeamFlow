@@ -1,0 +1,19 @@
+severity:
+  - CRITICAL
+  - HIGH
+  - MEDIUM
+
+scan:
+  skip-dirs:
+    - node_modules/.pnpm
+    - .git
+    - .turbo
+    - apps/*/dist
+    - apps/frontend/.next
+
+vulnerability:
+  type:
+    - os
+    - library
+
+format: table

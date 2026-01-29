@@ -9,7 +9,9 @@
     "lint": "turbo lint",
     "test": "turbo test",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\""
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
+    "audit": "pnpm audit --audit-level=high --prod",
+    "audit:fix": "pnpm audit --fix"
   },
   "devDependencies": {
     "@redocly/cli": "^1.15.2",
